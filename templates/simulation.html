@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }} — Simulation</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container wide">
+        <h1>{{ app_name }}</h1>
+        <p class="subtitle">Signal Simulation — Cycle {{ cycle_number }}</p>
+
+        <nav class="top-nav">
+            <a href="{{ url_for('index') }}">Upload</a>
+            <a href="{{ url_for('simulate') }}" class="active">Simulation</a>
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('whatif') }}">What-If</a>
+        </nav>
+
+        <div class="status-card">
+            <div id="mode-banner" class="mode-banner normal">NORMAL MODE</div>
+
+            <div class="signal-grid" id="signal-grid">
+                <div class="signal-box" data-road="North"><h3>North</h3><div class="light red" id="light-North"></div><span class="green-time" id="time-North">--</span></div>
+                <div class="signal-box" data-road="East"><h3>East</h3><div class="light red" id="light-East"></div><span class="green-time" id="time-East">--</span></div>
+                <div class="signal-box" data-road="South"><h3>South</h3><div class="light red" id="light-South"></div><span class="green-time" id="time-South">--</span></div>
+                <div class="signal-box" data-road="West"><h3>West</h3><div class="light red" id="light-West"></div><span class="green-time" id="time-West">--</span></div>
+            </div>
+
+            <div class="sim-status">
+                <p>Current signal: <strong id="current-road">-</strong></p>
+                <p>Remaining: <strong id="countdown">-</strong> sec</p>
+            </div>
+
+            <div class="sim-controls">
+                <button class="btn" id="start-btn">START</button>
+                <button class="btn secondary" id="stop-btn">STOP</button>
+                <button class="btn secondary" id="restart-btn">RESTART</button>
+            </div>
+        </div>
+
+        <a href="{{ url_for('index') }}" class="btn secondary">Run Next Cycle (new images)</a>
+        <a href="{{ url_for('dashboard') }}" class="btn secondary">View Dashboard</a>
+    </div>
+
+    <script>
+        const CYCLE_PLAN = {{ cycle_plan | tojson }};
+        const EMERGENCY_PLAN = {{ emergency_plan | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/simulation.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }} — Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container wide">
+        <h1>{{ app_name }}</h1>
+        <p class="subtitle">Analysis — Cycle {{ cycle_number }}</p>
+
+        <nav class="top-nav">
+            <a href="{{ url_for('index') }}">Upload</a>
+            <a href="{{ url_for('simulate') }}" class="active">Start Simulation →</a>
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('whatif') }}">What-If</a>
+        </nav>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-box">
+                    {% for message in messages %}
+                        <p>⚠️ {{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% for road in roads %}
+        {% set r = results[road] %}
+        <div class="status-card road-block {% if r.emergency_active %}emergency-block{% endif %}">
+            <h2>{{ road }} Direction
+                {% if r.no_vehicles %}
+                    <span class="badge warn">No vehicles detected</span>
+                {% else %}
+                    <span class="badge ok">{{ r.counts.total }} vehicles</span>
+                {% endif %}
+                <span class="badge {{ 'density-' ~ r.density.level.lower().replace(' ', '-') }}">{{ r.density.level }}</span>
+                {% if r.emergency_active %}
+                <span class="badge emergency">🚨 EMERGENCY ACTIVE</span>
+                {% elif r.emergency_detected %}
+                <span class="badge" style="background:#f59e0b; color:#fff;">⚠️ VEHICLE DETECTED (NO SIREN)</span>
+                {% endif %}
+            </h2>
+
+            <!-- Emergency Status Banner -->
+            {% if r.emergency_active %}
+            <div class="emergency-banner">
+                🚨 <strong>EMERGENCY PRIORITY ACTIVATED</strong><br>
+                <strong>Vehicle:</strong> {{ r.emergency_vehicle_type }} {% if r.emergency_confidence %}(Confidence: {{ (r.emergency_confidence * 100) | round(1) }}%){% endif %}<br>
+                <strong>Direction:</strong> {{ road }}<br>
+                <strong>Siren:</strong> ON {% if r.siren.confidence is not none %}(Confidence: {{ (r.siren.confidence * 100) | round(1) }}%){% endif %}<br>
+                <strong>Emergency Candidate Status:</strong> CONFIRMED (Visual + Acoustic Verified)<br>
+                <strong>Signal Action:</strong> All-red safety buffer (3s) → Green light granted to {{ road }} (25s)
+            </div>
+            {% elif r.emergency_detected or r.emergency_vehicle_type != "None" %}
+            <div class="info-banner" style="background: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; color: #d97706; padding: 12px; margin-bottom: 16px; border-radius: 4px;">
+                ⚠️ <strong>Visual Emergency Vehicle Present:</strong> {{ r.emergency_vehicle_type }}
+                {% if r.emergency_confidence %}(Confidence: {{ (r.emergency_confidence * 100) | round(1) }}%){% endif %}
+                on {{ road }}, but siren
+                {% if r.siren.confidence is none %}was not checked (no audio uploaded){% else %}was NOT detected as active (Confidence: {{ (r.siren.confidence * 100) | round(1) }}%){% endif %}.<br>
+                <em>Protocol Rule: Emergency Priority requires BOTH Visual Vehicle AND Acoustic Siren. Normal AI-Adaptive timing maintained for this direction.</em>
+            </div>
+            {% endif %}
+
+            <div class="image-compare">
+                <div class="image-card">
+                    <h3>Original</h3>
+                    <img src="{{ url_for('uploaded_file', filename=r.original) }}" alt="{{ road }} original">
+                </div>
+                <div class="image-card">
+                    <h3>Processed (Custom YOLO + COCO YOLO)</h3>
+                    <img src="{{ url_for('uploaded_file', filename=r.processed) }}" alt="{{ road }} processed">
+                </div>
+            </div>
+
+            <!-- Emergency Vehicle Telemetry Table -->
+            <div style="margin: 16px 0; background: #1e293b; padding: 14px; border-radius: 8px; border: 1px solid #334155;">
+                <h4 style="margin: 0 0 10px 0; color: #94a3b8; font-size: 0.9rem; text-transform: uppercase;">🚨 Emergency Detection Telemetry</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 0.9rem;">
+                    <div><span style="color:#64748b;">Emergency Detected:</span> <strong>{{ "YES" if (r.emergency_detected or r.emergency_vehicle_type != "None") else "NO" }}</strong></div>
+                    <div><span style="color:#64748b;">Vehicle Class:</span> <strong>{{ r.emergency_vehicle_type }}</strong></div>
+                    <div><span style="color:#64748b;">Visual Confidence:</span> <strong>{{ ((r.emergency_confidence * 100) | round(1)) ~ "%" if r.emergency_confidence else "N/A" }}</strong></div>
+                    <div><span style="color:#64748b;">Siren Status:</span> <strong>{{ "ON" if r.siren.is_siren else ("OFF" if r.siren.confidence is not none else "No Audio") }}</strong></div>
+                    <div><span style="color:#64748b;">Candidate Status:</span> <strong>{{ "CONFIRMED" if r.emergency_active else "NORMAL" }}</strong></div>
+                    <div><span style="color:#64748b;">Direction / Road:</span> <strong>{{ road }}</strong></div>
+                    <div><span style="color:#64748b;">Priority Action:</span> <strong>{{ "PREEMPTION" if r.emergency_active else "ADAPTIVE" }}</strong></div>
+                    {% if r.emergency_box %}
+                    <div><span style="color:#64748b;">Bounding Box:</span> <code>{{ r.emergency_box }}</code></div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <table class="counts-table">
+                <thead>
+                    <tr><th>Car</th><th>Motorcycle</th><th>Bus</th><th>Truck</th><th>Total Vehicles</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{{ r.counts.car }}</td>
+                        <td>{{ r.counts.motorcycle }}</td>
+                        <td>{{ r.counts.bus }}</td>
+                        <td>{{ r.counts.truck }}</td>
+                        <td><strong>{{ r.counts.total }}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <span class="metric-label">Density</span>
+                    <span class="metric-value">{{ r.density.percentage }}%</span>
+                </div>
+                <div class="metric-box">
+                    <span class="metric-label">Demand Score</span>
+                    <span class="metric-value">{{ r.demand_score }}</span>
+                </div>
+                <div class="metric-box">
+                    <span class="metric-label">Waiting Time (sim)</span>
+                    <span class="metric-value">{{ r.waiting_time }}s</span>
+                </div>
+                <div class="metric-box green-highlight">
+                    <span class="metric-label">Normal Adaptive Green</span>
+                    <span class="metric-value">{{ r.prediction.final_green_time }}s</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div style="margin-top: 24px; text-align: center;">
+            <a href="{{ url_for('simulate') }}" class="btn">PROCEED TO SIGNAL SIMULATION →</a>
+        </div>
+    </div>
+</body>
+</html>

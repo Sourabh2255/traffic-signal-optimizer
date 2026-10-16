@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }} — What-If</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container wide">
+        <h1>{{ app_name }}</h1>
+        <p class="subtitle">What-If Simulation</p>
+
+        <nav class="top-nav">
+            <a href="{{ url_for('index') }}">Upload</a>
+            <a href="{{ url_for('simulate') }}">Simulation</a>
+            <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('whatif') }}" class="active">What-If</a>
+        </nav>
+
+        <div class="status-card">
+            <h2>🔮 Simulate a Traffic Change</h2>
+
+            <form method="post" action="{{ url_for('whatif') }}">
+                <div class="form-row">
+                    <label for="road">Road</label>
+                    <select id="road" name="road" onchange="this.form.submit()">
+                        {% for road in roads %}
+                        <option value="{{ road }}" {% if road == selected_road %}selected{% endif %}>{{ road }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <p class="note">Current {{ selected_road }} counts: Car {{ current.counts.car }}, Motorcycle {{ current.counts.motorcycle }}, Bus {{ current.counts.bus }}, Truck {{ current.counts.truck }} | Green time: {{ current.prediction.final_green_time }}s</p>
+
+                <div class="form-row">
+                    <label for="percent_change">Traffic change %</label>
+                    <input type="number" id="percent_change" name="percent_change" value="0" step="5">
+                </div>
+                <div class="form-row">
+                    <label for="extra_buses">Add buses</label>
+                    <input type="number" id="extra_buses" name="extra_buses" value="0" min="0">
+                </div>
+                <div class="form-row">
+                    <label for="extra_motorcycles">Add motorcycles</label>
+                    <input type="number" id="extra_motorcycles" name="extra_motorcycles" value="0" min="0">
+                </div>
+
+                <button type="submit" class="btn">Simulate Impact</button>
+            </form>
+        </div>
+
+        {% if result %}
+        <div class="status-card">
+            <h2>📈 Predicted Impact on {{ selected_road }}</h2>
+            <table class="counts-table">
+                <thead><tr><th>Car</th><th>Motorcycle</th><th>Bus</th><th>Truck</th><th>Total</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>{{ result.new_counts.car }}</td>
+                        <td>{{ result.new_counts.motorcycle }}</td>
+                        <td>{{ result.new_counts.bus }}</td>
+                        <td>{{ result.new_counts.truck }}</td>
+                        <td><strong>{{ result.new_counts.total }}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="metrics-grid">
+                <div class="metric-box"><span class="metric-label">New Density</span><span class="metric-value">{{ result.density.percentage }}% ({{ result.density.level }})</span></div>
+                <div class="metric-box"><span class="metric-label">New Demand</span><span class="metric-value">{{ result.demand_score }}</span></div>
+                <div class="metric-box"><span class="metric-label">Original Green Time</span><span class="metric-value">{{ result.original_green_time }}s</span></div>
+                <div class="metric-box highlight"><span class="metric-label">New Predicted Green Time</span><span class="metric-value">{{ result.prediction.final_green_time }}s</span></div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

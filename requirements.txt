@@ -1,0 +1,23 @@
+Flask==3.0.3
+
+# Phase 3: Computer Vision (YOLO vehicle detection)
+ultralytics==8.3.40
+opencv-python-headless==4.10.0.84
+# Using opencv-python-headless instead of opencv-python: this project
+# never calls cv2.imshow() (images are saved to disk and shown in the
+# browser instead), so the "headless" build avoids pulling in GUI
+# system libraries that aren't needed and can cause install issues.
+
+# Phase 5-7: Data Science / Machine Learning
+pandas==2.2.3
+numpy==1.26.4
+scikit-learn==1.5.2
+joblib==1.4.2
+matplotlib==3.9.2
+
+# Phase 10-11: Audio ML (siren detection)
+librosa==0.10.2.post1
+soundfile==0.12.1
+
+# Phase 13: Dashboard charts are rendered client-side via Plotly.js
+# (loaded from a CDN in dashboard.html) — no Python Plotly package needed.

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }} — Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+</head>
+<body>
+    <div class="container wide">
+        <h1>{{ app_name }}</h1>
+        <p class="subtitle">Data Science & Model Telemetry Dashboard</p>
+
+        <nav class="top-nav">
+            <a href="{{ url_for('index') }}">Upload</a>
+            <a href="{{ url_for('simulate') }}">Simulation</a>
+            <a href="{{ url_for('dashboard') }}" class="active">Dashboard</a>
+            <a href="{{ url_for('whatif') }}">What-If</a>
+        </nav>
+
+        {% if not analysis %}
+        <div class="flash-box"><p>⚠️ No analysis has been run yet. <a href="{{ url_for('index') }}">Upload images first</a>.</p></div>
+        {% endif %}
+
+        <!-- Custom Emergency YOLO Model Telemetry -->
+        <div class="status-card" style="border-left: 4px solid #ef4444;">
+            <h2>🚨 Custom YOLO Emergency-Vehicle Model</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                <div class="metric-box">
+                    <span class="metric-label">Model Weights</span>
+                    <span class="metric-value" style="font-size: 1rem; word-break: break-all;">best_emergency_vehicle.pt</span>
+                </div>
+                <div class="metric-box">
+                    <span class="metric-label">Model Status</span>
+                    <span class="metric-value" style="font-size: 1.1rem; color: #4ade80;">
+                        {{ "✓ LOADED & ACTIVE" if emergency_model_info.loaded else "⚠️ OFFLINE" }}
+                    </span>
+                </div>
+                <div class="metric-box">
+                    <span class="metric-label">Target Classes</span>
+                    <span class="metric-value" style="font-size: 1rem;">
+                        Class 0: Ambulance<br>Class 1: Fire Truck
+                    </span>
+                </div>
+                <div class="metric-box">
+                    <span class="metric-label">Confidence Threshold</span>
+                    <span class="metric-value">{{ emergency_model_info.confidence_threshold }}</span>
+                </div>
+            </div>
+            <p class="note" style="margin: 0;">
+                <strong>Dual-Verification Decision Protocol:</strong>
+                <code>emergency_vehicle_detected AND siren_detected = emergency_candidate</code>.
+                When verified, conflicting directions transition through a 3s safety buffer to red before the emergency direction is granted a 25s green priority window. Normal green times remain bounded between 15s and 60s.
+            </p>
+        </div>
+
+        {% if model_metrics %}
+        <div class="status-card">
+            <h2>🤖 Green-Time Model Evaluation</h2>
+            <table class="counts-table">
+                <thead><tr><th>Model</th><th>MAE</th><th>RMSE</th><th>R²</th></tr></thead>
+                <tbody>
+                    <tr><td>Linear Regression</td><td>{{ model_metrics.linear_regression.MAE }}</td><td>{{ model_metrics.linear_regression.RMSE }}</td><td>{{ model_metrics.linear_regression.R2 }}</td></tr>
+                    <tr><td><strong>Random Forest (used)</strong></td><td>{{ model_metrics.random_forest.MAE }}</td><td>{{ model_metrics.random_forest.RMSE }}</td><td>{{ model_metrics.random_forest.R2 }}</td></tr>
+                </tbody>
+            </table>
+            <p class="note">Trained on {{ model_metrics.n_train }} simulation-generated samples, tested on {{ model_metrics.n_test }}. Target labels are simulation-based (see README) — not real-world-validated timings. Linear Regression can score slightly higher here because the labels come from a linear demand rule; Random Forest is kept as the deployed model as specified by the project, and results are reported unmodified.</p>
+
+            <div class="image-compare">
+                <div class="image-card"><h3>Actual vs Predicted</h3><img src="{{ url_for('plot_file', filename='actual_vs_predicted.png') }}" alt="Actual vs Predicted"></div>
+                <div class="image-card"><h3>Feature Importance</h3><img src="{{ url_for('plot_file', filename='feature_importance.png') }}" alt="Feature Importance"></div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if siren_metrics %}
+        <div class="status-card">
+            <h2>🔊 Siren Classifier Evaluation</h2>
+            <p>Accuracy: <strong>{{ (siren_metrics.accuracy * 100) | round(1) }}%</strong> on {{ siren_metrics.n_test }} held-out synthetic clips.</p>
+            <p class="note">⚠️ {{ siren_metrics.note }}</p>
+        </div>
+        {% endif %}
+
+        {% if analysis %}
+        <div class="status-card">
+            <h2>📊 Current Cycle — Exploratory Data Analysis</h2>
+            <div id="chart-vehicle-by-road" class="chart-box"></div>
+            <div id="chart-type-distribution" class="chart-box"></div>
+            <div id="chart-green-time" class="chart-box"></div>
+            <div id="chart-density-demand" class="chart-box"></div>
+        </div>
+        {% endif %}
+
+        {% if comparison %}
+        <div class="status-card">
+            <h2>⚖️ Fixed vs AI-Adaptive Comparison (Simulation-Based)</h2>
+            <table class="counts-table">
+                <thead><tr><th>Strategy</th><th>Total Green Time</th><th>Vehicles Served (est.)</th><th>Unserved (est.)</th><th>Efficiency Score</th></tr></thead>
+                <tbody>
+                    <tr><td>Fixed ({{ fixed_signal_time }}s/road)</td><td>{{ comparison.fixed.total_green_time }}s</td><td>{{ comparison.fixed.vehicles_served }}</td><td>{{ comparison.fixed.unserved_vehicles }}</td><td>{{ comparison.fixed.efficiency_score }}%</td></tr>
+                    <tr><td><strong>AI-Adaptive</strong></td><td>{{ comparison.adaptive.total_green_time }}s</td><td>{{ comparison.adaptive.vehicles_served }}</td><td>{{ comparison.adaptive.unserved_vehicles }}</td><td><strong>{{ comparison.adaptive.efficiency_score }}%</strong></td></tr>
+                </tbody>
+            </table>
+            <p class="note">Efficiency Score = estimated vehicles served ÷ total vehicles present, assuming a constant service rate. Simulation-based only — not a real-world deployment result.</p>
+        </div>
+        {% endif %}
+
+        <div class="status-card">
+            <h2>🚨 Emergency Event Log (this session)</h2>
+            {% if emergency_log %}
+            <table class="counts-table">
+                <thead><tr><th>Time</th><th>Vehicle Class</th><th>Direction / Road</th><th>Visual Conf</th><th>Siren Audio</th><th>Priority Action</th></tr></thead>
+                <tbody>
+                    {% for e in emergency_log %}
+                    <tr>
+                        <td>{{ e.time }}</td>
+                        <td><strong>{{ e.vehicle }}</strong></td>
+                        <td>{{ e.road }}</td>
+                        <td>{{ e.vehicle_confidence }}</td>
+                        <td>{{ e.siren }} {% if e.siren_confidence %}({{ e.siren_confidence }}){% endif %}</td>
+                        <td><span class="badge emergency">{{ e.action }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="note">No emergency events logged in this session.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if analysis %}
+    <script>
+        const ANALYSIS = {{ analysis | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    {% endif %}
+</body>
+</html>

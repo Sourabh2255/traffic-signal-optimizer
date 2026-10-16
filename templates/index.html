@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Adaptive Traffic Signal Control</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container wide">
+        <!-- Main Application Header -->
+        <header class="header-card">
+            <div class="header-top">
+                <div class="brand-section">
+                    <div class="brand-icon">🚦</div>
+                    <div>
+                        <h1 class="main-title">AI Adaptive Traffic Signal Control</h1>
+                        <p class="subtitle">Intelligent traffic analysis and emergency vehicle prioritization</p>
+                    </div>
+                </div>
+                <nav class="top-nav">
+                    <a href="{{ url_for('index') }}" class="active">Control Dashboard</a>
+                    <a href="{{ url_for('simulate') }}">Live Simulation</a>
+                    <a href="{{ url_for('dashboard') }}">Model Telemetry</a>
+                    <a href="{{ url_for('whatif') }}">What-If Studio</a>
+                </nav>
+            </div>
+
+            <!-- Telemetry & Quick Action Bar -->
+            <div class="header-status-bar">
+                <div class="telemetry-pills">
+                    <span class="pill pill-green" title="COCO Traffic Detection & Density Engine">
+                        <span class="pill-dot"></span> Traffic Model: Active
+                    </span>
+                    <span class="pill pill-blue" title="Custom YOLO trained on Ambulance & Fire Truck">
+                        <span class="pill-dot"></span> Custom Emergency YOLO Detector Active
+                    </span>
+                    <span class="pill pill-purple" title="Siren Audio Feature Extraction & ML Classifier">
+                        <span class="pill-dot"></span> Siren Audio AI: Ready
+                    </span>
+                </div>
+
+                <div class="quick-demo-actions">
+                    <span class="demo-label">College Demo Presets:</span>
+                    <button type="button" class="btn-demo btn-demo-emergency" id="btn-demo-emergency" title="Load 4 images + ambulance on South + siren audio">
+                        🚑 Emergency Scenario
+                    </button>
+                    <button type="button" class="btn-demo btn-demo-normal" id="btn-demo-normal" title="Load 4 images without siren audio">
+                        🚗 Normal Rush Hour
+                    </button>
+                    <button type="button" class="btn-demo btn-demo-clear" id="btn-clear-all" title="Clear all inputs">
+                        🔄 Clear All
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Form & Input Area -->
+        <main>
+            <!-- SECTION 1: 4-Way Traffic Image Uploads -->
+            <section class="section-card">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">1. Upload Directional Traffic Images</h2>
+                        <p class="section-desc">Upload one traffic camera image for each approach direction. All four directions (North, East, South, West) are required for comprehensive cycle optimization.</p>
+                    </div>
+                    <div id="upload-summary-badge" class="badge-status badge-amber">
+                        0 / 4 Directions Ready
+                    </div>
+                </div>
+
+                <form id="traffic-form" method="post" enctype="multipart/form-data">
+                    <div class="roads-grid">
+                        <!-- North Direction -->
+                        <div class="road-card" id="card-north">
+                            <div class="road-card-header">
+                                <div class="road-card-title">
+                                    <span class="road-compass-icon compass-north">⬆</span>
+                                    <span>North Direction</span>
+                                </div>
+                                <span class="file-status-tag" id="status-tag-north">Required</span>
+                            </div>
+                            
+                            <!-- Dropzone View -->
+                            <div class="upload-dropzone" id="dropzone-north">
+                                <input type="file" id="file-north" name="north" accept=".jpg,.jpeg,.png" class="file-input-hidden">
+                                <div class="dropzone-content">
+                                    <div class="dropzone-icon">📷</div>
+                                    <p class="dropzone-text"><strong>Click to upload</strong> or drag & drop</p>
+                                    <p class="dropzone-hint">JPG, JPEG, PNG (Max 16MB)</p>
+                                </div>
+                            </div>
+
+                            <!-- Preview View (hidden until file selected) -->
+                            <div class="file-preview-card" id="preview-north" style="display: none;">
+                                <div class="preview-img-wrap">
+                                    <img id="img-north" src="" alt="North Road Preview" class="preview-thumbnail">
+                                </div>
+                                <div class="preview-meta">
+                                    <p class="preview-filename" id="name-north">image.jpg</p>
+                                    <p class="preview-filesize" id="size-north">0 KB</p>
+                                    <div class="preview-actions">
+                                        <button type="button" class="btn-sm btn-replace" onclick="triggerFileInput('north')">Replace</button>
+                                        <button type="button" class="btn-sm btn-remove" onclick="removeFile('north')">Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="direction-config-info">Configured Max Green: <strong>60s</strong></div>
+                        </div>
+
+                        <!-- East Direction -->
+                        <div class="road-card" id="card-east">
+                            <div class="road-card-header">
+                                <div class="road-card-title">
+                                    <span class="road-compass-icon compass-east">➡</span>
+                                    <span>East Direction</span>
+                                </div>
+                                <span class="file-status-tag" id="status-tag-east">Required</span>
+                            </div>
+                            
+                            <div class="upload-dropzone" id="dropzone-east">
+                                <input type="file" id="file-east" name="east" accept=".jpg,.jpeg,.png" class="file-input-hidden">
+                                <div class="dropzone-content">
+                                    <div class="dropzone-icon">📷</div>
+                                    <p class="dropzone-text"><strong>Click to upload</strong> or drag & drop</p>
+                                    <p class="dropzone-hint">JPG, JPEG, PNG (Max 16MB)</p>
+                                </div>
+                            </div>
+
+                            <div class="file-preview-card" id="preview-east" style="display: none;">
+                                <div class="preview-img-wrap">
+                                    <img id="img-east" src="" alt="East Road Preview" class="preview-thumbnail">
+                                </div>
+                                <div class="preview-meta">
+                                    <p class="preview-filename" id="name-east">image.jpg</p>
+                                    <p class="preview-filesize" id="size-east">0 KB</p>
+                                    <div class="preview-actions">
+                                        <button type="button" class="btn-sm btn-replace" onclick="triggerFileInput('east')">Replace</button>
+                                        <button type="button" class="btn-sm btn-remove" onclick="removeFile('east')">Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="direction-config-info">Configured Max Green: <strong>60s</strong></div>
+                        </div>
+
+                        <!-- South Direction -->
+                        <div class="road-card" id="card-south">
+                            <div class="road-card-header">
+                                <div class="road-card-title">
+                                    <span class="road-compass-icon compass-south">⬇</span>
+                                    <span>South Direction</span>
+                                </div>
+                                <span class="file-status-tag" id="status-tag-south">Required</span>
+                            </div>
+                            
+                            <div class="upload-dropzone" id="dropzone-south">
+                                <input type="file" id="file-south" name="south" accept=".jpg,.jpeg,.png" class="file-input-hidden">
+                                <div class="dropzone-content">
+                                    <div class="dropzone-icon">📷</div>
+                                    <p class="dropzone-text"><strong>Click to upload</strong> or drag & drop</p>
+                                    <p class="dropzone-hint">JPG, JPEG, PNG (Max 16MB)</p>
+                                </div>
+                            </div>
+
+                            <div class="file-preview-card" id="preview-south" style="display: none;">
+                                <div class="preview-img-wrap">
+                                    <img id="img-south" src="" alt="South Road Preview" class="preview-thumbnail">
+                                </div>
+                                <div class="preview-meta">
+                                    <p class="preview-filename" id="name-south">image.jpg</p>
+                                    <p class="preview-filesize" id="size-south">0 KB</p>
+                                    <div class="preview-actions">
+                                        <button type="button" class="btn-sm btn-replace" onclick="triggerFileInput('south')">Replace</button>
+                                        <button type="button" class="btn-sm btn-remove" onclick="removeFile('south')">Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="direction-config-info">Configured Max Green: <strong>60s</strong></div>
+                        </div>
+
+                        <!-- West Direction -->
+                        <div class="road-card" id="card-west">
+                            <div class="road-card-header">
+                                <div class="road-card-title">
+                                    <span class="road-compass-icon compass-west">⬅</span>
+                                    <span>West Direction</span>
+                                </div>
+                                <span class="file-status-tag" id="status-tag-west">Required</span>
+                            </div>
+                            
+                            <div class="upload-dropzone" id="dropzone-west">
+                                <input type="file" id="file-west" name="west" accept=".jpg,.jpeg,.png" class="file-input-hidden">
+                                <div class="dropzone-content">
+                                    <div class="dropzone-icon">📷</div>
+                                    <p class="dropzone-text"><strong>Click to upload</strong> or drag & drop</p>
+                                    <p class="dropzone-hint">JPG, JPEG, PNG (Max 16MB)</p>
+                                </div>
+                            </div>
+
+                            <div class="file-preview-card" id="preview-west" style="display: none;">
+                                <div class="preview-img-wrap">
+                                    <img id="img-west" src="" alt="West Road Preview" class="preview-thumbnail">
+                                </div>
+                                <div class="preview-meta">
+                                    <p class="preview-filename" id="name-west">image.jpg</p>
+                                    <p class="preview-filesize" id="size-west">0 KB</p>
+                                    <div class="preview-actions">
+                                        <button type="button" class="btn-sm btn-replace" onclick="triggerFileInput('west')">Replace</button>
+                                        <button type="button" class="btn-sm btn-remove" onclick="removeFile('west')">Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="direction-config-info">Configured Max Green: <strong>60s</strong></div>
+                        </div>
+                    </div>
+
+                    <!-- SECTION 2: Optional Siren Audio Upload Area -->
+                    <div class="siren-section-card">
+                        <div class="siren-header">
+                            <div class="siren-title-wrap">
+                                <span class="siren-icon">🚨</span>
+                                <div>
+                                    <h3 class="siren-title">Emergency Siren Audio (Optional — WAV)</h3>
+                                    <p class="siren-desc">Acoustic sensor validation. Select which direction the recording is associated with.</p>
+                                </div>
+                            </div>
+                            <div class="siren-badge">Optional Acoustic Check</div>
+                        </div>
+
+                        <div class="siren-controls-grid">
+                            <!-- Direction selector for audio -->
+                            <div class="siren-selector-box">
+                                <label for="siren-direction-select" class="control-label">
+                                    Associated Approach Direction:
+                                </label>
+                                <select id="siren-direction-select" name="siren_direction" class="select-input">
+                                    <option value="South" selected>South Direction (Typical Demo)</option>
+                                    <option value="North">North Direction</option>
+                                    <option value="East">East Direction</option>
+                                    <option value="West">West Direction</option>
+                                </select>
+                                <p class="control-hint">The audio classifier result will be evaluated specifically against this direction's visual feed.</p>
+                            </div>
+
+                            <!-- WAV File Upload -->
+                            <div class="siren-upload-box">
+                                <div class="upload-dropzone audio-dropzone" id="dropzone-audio">
+                                    <input type="file" id="file-siren" name="siren_audio" accept=".wav" class="file-input-hidden">
+                                    <div class="dropzone-content">
+                                        <div class="dropzone-icon">🎙️</div>
+                                        <p class="dropzone-text"><strong>Upload Siren WAV</strong> or drag file here</p>
+                                        <p class="dropzone-hint">WAV format only (Optional)</p>
+                                    </div>
+                                </div>
+
+                                <div class="file-preview-card audio-preview-card" id="preview-audio" style="display: none;">
+                                    <div class="audio-player-wrap">
+                                        <audio id="audio-player" controls preload="none" class="audio-element"></audio>
+                                    </div>
+                                    <div class="preview-meta">
+                                        <p class="preview-filename" id="name-audio">siren.wav</p>
+                                        <p class="preview-filesize" id="size-audio">0 KB</p>
+                                        <div class="preview-actions">
+                                            <button type="button" class="btn-sm btn-replace" onclick="triggerFileInput('siren')">Replace</button>
+                                            <button type="button" class="btn-sm btn-remove" onclick="removeAudioFile()">Remove Audio</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Strict Dual-Verification Protocol Notice -->
+                        <div class="dual-rule-banner">
+                            <span class="rule-icon">🛡️</span>
+                            <div class="rule-text">
+                                <strong>Strict Dual-Verification Safety Logic:</strong> Emergency preemption is confirmed 
+                                <em>ONLY IF</em> both acoustic siren AND visual emergency vehicle (Ambulance/Fire Truck) 
+                                meet confidence thresholds in the chosen direction. If no audio is provided, normal adaptive signal timing is safely maintained.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Bar with One Prominent Analyze Button -->
+                    <div class="action-submit-bar">
+                        <div class="validation-status-msg" id="validation-msg">
+                            ⚠️ Please upload all 4 road images (North, East, South, West) to begin analysis.
+                        </div>
+                        <button type="button" id="analyze-btn" class="btn-analyze" disabled>
+                            <span class="btn-icon">⚡</span>
+                            <span class="btn-text">Analyze Traffic</span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Loading Overlay Modal -->
+            <div id="loading-overlay" class="modal-overlay" style="display: none;">
+                <div class="modal-card loading-card">
+                    <div class="radar-spinner">
+                        <div class="radar-circle"></div>
+                        <div class="radar-scan"></div>
+                    </div>
+                    <h3 class="loading-title">AI Traffic Optimization in Progress</h3>
+                    <p class="loading-subtitle" id="loading-step-text">Executing neural pipelines...</p>
+                    <div class="loading-progress-steps">
+                        <div class="progress-step active" id="step-coco">1. Vehicle Detection (YOLO)</div>
+                        <div class="progress-step" id="step-emerg">2. Custom Emergency Scan</div>
+                        <div class="progress-step" id="step-siren">3. Audio Feature Extraction</div>
+                        <div class="progress-step" id="step-timing">4. Adaptive Signal Optimization</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: Results Dashboard (populated after analysis) -->
+            <section id="results-section" class="section-card results-section" style="display: none;">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">2. Analysis Results & Adaptive Signal Allocations</h2>
+                        <p class="section-desc">Real-time vehicle detection counts, traffic density percentages, configured limits, and recommended green times.</p>
+                    </div>
+                    <a href="#simulation-section" class="btn-jump-sim">Go to Signal Simulation ↓</a>
+                </div>
+
+                <!-- Emergency Status Banner -->
+                <div id="emergency-alert-banner" class="emergency-banner banner-blue">
+                    <div class="banner-icon" id="banner-icon">ℹ️</div>
+                    <div class="banner-content">
+                        <h3 class="banner-heading" id="banner-heading">Normal Adaptive Traffic Optimization</h3>
+                        <p class="banner-reason" id="banner-reason">No siren audio provided — normal adaptive mode.</p>
+                    </div>
+                    <div class="banner-badge" id="banner-badge">ADAPTIVE MODE</div>
+                </div>
+
+                <!-- Dedicated Emergency Analysis & Dual-Verification Panel (Task 5) -->
+                <div id="emergency-analysis-panel" class="emergency-analysis-panel" style="display: none;">
+                    <div class="emergency-panel-header">
+                        <div class="panel-title-wrap">
+                            <span class="panel-icon">🚨</span>
+                            <div>
+                                <h3 class="panel-title">Emergency Priority Dual-Verification Analysis</h3>
+                                <p class="panel-subtitle">Protocol: <code>emergency_vehicle_detected == True AND siren_detected == True</code></p>
+                            </div>
+                        </div>
+                        <span id="em-panel-status-badge" class="val-tag tag-not-confirmed">Not Confirmed</span>
+                    </div>
+
+                    <div class="emergency-panel-grid">
+                        <div class="emergency-panel-table-wrap">
+                            <table class="emergency-audit-table">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Selected Direction:</strong></td>
+                                        <td id="em-audit-direction"><span class="badge-dir">South</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Ambulance Detected:</strong></td>
+                                        <td id="em-audit-ambulance"><span class="val-tag tag-no">No</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Fire Truck Detected:</strong></td>
+                                        <td id="em-audit-firetruck"><span class="val-tag tag-no">No</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Emergency Detection Confidence:</strong></td>
+                                        <td id="em-audit-confidence">--</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Siren Detected:</strong></td>
+                                        <td id="em-audit-siren"><span class="val-tag tag-no">No</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Siren Confidence:</strong></td>
+                                        <td id="em-audit-siren-conf">--</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Emergency Confirmation:</strong></td>
+                                        <td id="em-audit-confirmation"><span class="val-tag tag-not-confirmed">Not Confirmed</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Priority Status / Reason:</strong></td>
+                                        <td id="em-audit-reason" class="audit-reason-text">No emergency vehicle or siren detected.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Annotated Image Preview with Bounding Boxes -->
+                        <div class="emergency-panel-preview-wrap">
+                            <div class="preview-header">
+                                <span class="preview-label">YOLO Annotated Detection Preview</span>
+                                <button type="button" class="btn-sm btn-inspect" id="btn-inspect-em-annotated">🔍 Inspect Preview</button>
+                            </div>
+                            <div class="preview-img-container" id="em-preview-container">
+                                <img id="em-preview-img" src="" alt="Emergency Detection Preview" class="em-annotated-thumb">
+                                <div id="em-preview-empty" class="em-preview-empty" style="display: none;">
+                                    <span>No bounding box preview available</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4 Direction Results Cards Grid -->
+                <div class="results-grid" id="results-cards-container">
+                    <!-- Cards will be populated dynamically by dashboard.js -->
+                </div>
+
+                <!-- Cycle Summary & Bounds Card -->
+                <div class="cycle-summary-card" id="cycle-summary-card">
+                    <div class="cycle-summary-header">
+                        <h4 id="cycle-summary-title">🚦 Adaptive Cycle Allocation Summary</h4>
+                        <span class="cycle-badge" id="total-cycle-badge">Total Cycle: --s</span>
+                    </div>
+                    <div class="cycle-bars-container" id="cycle-bars-container">
+                        <!-- Sequence bars rendered here -->
+                    </div>
+                    <p class="timing-rule-note" id="timing-rule-note">
+                        <strong>Critical Timing Rule Enforced:</strong> 
+                        <code>final_green_time = min(max_green_time, max(min_green_time, predicted_green_time))</code>. 
+                        Recommended green duration never exceeds the configured maximum of 60s, respecting safety bounds [15s, 60s].
+                    </p>
+                </div>
+            </section>
+
+            <!-- SECTION 4: Signal Simulation Visualizer -->
+            <section id="simulation-section" class="section-card simulation-section" style="display: none;">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">3. Visual Four-Way Signal Simulation</h2>
+                        <p class="section-desc">Real-time interactive 4-way intersection simulation. Visualizes phase transitions, countdown timers, zero conflicting greens, and emergency preemption.</p>
+                    </div>
+                    <div class="sim-mode-pill" id="sim-mode-pill">
+                        NORMAL ADAPTIVE CYCLE
+                    </div>
+                </div>
+
+                <!-- Simulation Controls Toolbar -->
+                <div class="sim-toolbar">
+                    <div class="sim-btn-group">
+                        <button type="button" id="sim-btn-start" class="btn-sim btn-sim-start">▶ Start Simulation</button>
+                        <button type="button" id="sim-btn-pause" class="btn-sim btn-sim-pause">⏸ Pause</button>
+                        <button type="button" id="sim-btn-stop" class="btn-sim btn-sim-stop">⏹ Stop</button>
+                        <button type="button" id="sim-btn-restart" class="btn-sim btn-sim-restart">🔄 Restart</button>
+                    </div>
+                    <div class="sim-speed-wrap">
+                        <label for="sim-speed-select">Simulation Speed:</label>
+                        <select id="sim-speed-select" class="speed-select">
+                            <option value="1" selected>1x (Real-Time)</option>
+                            <option value="2">2x (Fast)</option>
+                            <option value="5">5x (Demo Speed)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 4-Way Intersection Visualizer Diagram -->
+                <div class="intersection-viewport">
+                    <div class="intersection-canvas">
+                        <!-- North Approach -->
+                        <div class="approach-lane approach-north" id="approach-North">
+                            <div class="approach-label">NORTH APPROACH</div>
+                            <div class="traffic-light-fixture">
+                                <div class="fixture-housing">
+                                    <div class="bulb red" id="bulb-red-North"></div>
+                                    <div class="bulb yellow" id="bulb-yellow-North"></div>
+                                    <div class="bulb green" id="bulb-green-North"></div>
+                                </div>
+                                <div class="fixture-display">
+                                    <span class="fixture-road">NORTH</span>
+                                    <span class="fixture-time" id="sim-timer-North">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- East Approach -->
+                        <div class="approach-lane approach-east" id="approach-East">
+                            <div class="approach-label">EAST APPROACH</div>
+                            <div class="traffic-light-fixture">
+                                <div class="fixture-housing">
+                                    <div class="bulb red" id="bulb-red-East"></div>
+                                    <div class="bulb yellow" id="bulb-yellow-East"></div>
+                                    <div class="bulb green" id="bulb-green-East"></div>
+                                </div>
+                                <div class="fixture-display">
+                                    <span class="fixture-road">EAST</span>
+                                    <span class="fixture-time" id="sim-timer-East">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- South Approach -->
+                        <div class="approach-lane approach-south" id="approach-South">
+                            <div class="approach-label">SOUTH APPROACH</div>
+                            <div class="traffic-light-fixture">
+                                <div class="fixture-housing">
+                                    <div class="bulb red" id="bulb-red-South"></div>
+                                    <div class="bulb yellow" id="bulb-yellow-South"></div>
+                                    <div class="bulb green" id="bulb-green-South"></div>
+                                </div>
+                                <div class="fixture-display">
+                                    <span class="fixture-road">SOUTH</span>
+                                    <span class="fixture-time" id="sim-timer-South">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- West Approach -->
+                        <div class="approach-lane approach-west" id="approach-West">
+                            <div class="approach-label">WEST APPROACH</div>
+                            <div class="traffic-light-fixture">
+                                <div class="fixture-housing">
+                                    <div class="bulb red" id="bulb-red-West"></div>
+                                    <div class="bulb yellow" id="bulb-yellow-West"></div>
+                                    <div class="bulb green" id="bulb-green-West"></div>
+                                </div>
+                                <div class="fixture-display">
+                                    <span class="fixture-road">WEST</span>
+                                    <span class="fixture-time" id="sim-timer-West">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Center Intersection Island -->
+                        <div class="intersection-center-island">
+                            <div class="center-radar-ring"></div>
+                            <div class="center-content">
+                                <div class="center-active-label">ACTIVE GREEN</div>
+                                <div class="center-active-road" id="sim-active-road">STANDBY</div>
+                                <div class="center-countdown" id="sim-countdown">--</div>
+                                <div class="center-phase-badge" id="sim-phase-badge">READY</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulation Safety Architecture Notes -->
+                <div class="sim-safety-notes">
+                    <div class="safety-col">
+                        <h5>🛡️ Zero-Conflict Invariant</h5>
+                        <p>At no point in the simulation can two conflicting directions display green simultaneously. All non-active approaches are locked to RED.</p>
+                    </div>
+                    <div class="safety-col">
+                        <h5>⏱️ Clearance & Safety Buffers</h5>
+                        <p>Every phase change transitions through a 3-second Yellow clearance. Emergency preemption enforces an additional 3-second All-Red safety buffer.</p>
+                    </div>
+                    <div class="safety-col">
+                        <h5>🔄 Clean State Management</h5>
+                        <p>Simulation stopping, pausing, or restarting clears all interval timers and callbacks, preventing duplicate or overlapping timers.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Lightbox Modal for High-Res Annotated Images -->
+        <div id="lightbox-modal" class="modal-overlay" style="display: none;">
+            <div class="lightbox-card">
+                <div class="lightbox-header">
+                    <h3 id="lightbox-title">Annotated Detections</h3>
+                    <button type="button" class="lightbox-close" id="lightbox-close-btn">&times;</button>
+                </div>
+                <div class="lightbox-body">
+                    <img id="lightbox-img" src="" alt="Detections Preview" class="lightbox-img">
+                </div>
+                <div class="lightbox-footer" id="lightbox-footer">
+                    Vehicle Detections & Bounding Boxes
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p><strong>AI-Based Adaptive Traffic Signal Time Optimization System</strong></p>
+            <p class="footer-meta">Powered by YOLOv8, Custom Emergency Vehicle Detector, Spectral Audio Siren Classifier & Random Forest Regressor</p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/simulation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "linear_regression": {
+    "MAE": 2.526,
+    "RMSE": 3.143,
+    "R2": 0.835
+  },
+  "random_forest": {
+    "MAE": 2.766,
+    "RMSE": 3.379,
+    "R2": 0.809
+  },
+  "features": [
+    "car_count",
+    "motorcycle_count",
+    "bus_count",
+    "truck_count",
+    "total_vehicle_count",
+    "density_percentage",
+    "demand_score",
+    "waiting_time"
+  ],
+  "feature_importance": {
+    "density_percentage": 0.0084,
+    "bus_count": 0.0126,
+    "total_vehicle_count": 0.0131,
+    "truck_count": 0.0144,
+    "car_count": 0.0214,
+    "motorcycle_count": 0.0232,
+    "waiting_time": 0.0243,
+    "demand_score": 0.8825
+  },
+  "n_train": 960,
+  "n_test": 240
+}

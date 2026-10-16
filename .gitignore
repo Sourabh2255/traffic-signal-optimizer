@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python Virtual Environment
+venv/
+env/
+.venv/
+ENV/
+
+# Large Archives & Training Data Splits (>100MB / thousands of images)
+ambulance_yolo.zip
+data/emergency_yolo/
+data/train/
+data/valid/
+data/test/
+data/export/
+
+# Training runs & logs
+runs/
+
+# Runtime uploads (keep directory with .gitkeep)
+uploads/*
+!uploads/.gitkeep
+
+# Temporary debug images
+debug_annotated_ambulance.jpg
+
+# Environment & IDE settings
+.env
+.vscode/
+.idea/
+*.log
