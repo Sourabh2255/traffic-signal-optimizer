@@ -129,7 +129,7 @@ def test_scenario_2_siren_without_emergency_vehicle(client):
 
     ea = json_data["emergency_analysis"]
     assert ea["confirmed"] is False
-    assert "no emergency vehicle was confirmed" in ea["reason"].lower()
+    assert "searching all directions" in ea["reason"].lower() or "no emergency vehicle" in ea.get("detailed_reason", "").lower()
 
 
 # ===========================================================================
@@ -204,29 +204,43 @@ def test_scenario_4_matching_ambulance_and_siren(client):
 
 
 # ===========================================================================
-# SCENARIO 5: Wrong direction selected (mismatch)
+# SCENARIO 5: Direction-independent siren resolution (Auto-Scan)
 # ===========================================================================
 def test_scenario_5_mismatched_direction(client):
-    """Ambulance is on South, but siren is assigned to North."""
+    """
+    Direction-Independent Siren Test:
+    Ambulance is on South, but siren is uploaded without direction or with arbitrary direction (e.g. North).
+    The system inspects all 4 directions and automatically grants emergency priority to South.
+    """
     data = {
         "north": (get_normal_image_bytes(), "north.jpg"),
         "east": (get_normal_image_bytes(), "east.jpg"),
         "south": (get_ambulance_image_bytes(), "Ambulance.jpg"),
         "west": (get_normal_image_bytes(), "west.jpg"),
         "siren_audio": (get_siren_audio_bytes(), "ambulance_siren.wav"),
-        "siren_direction": "North",  # MISMATCH!
+        "siren_direction": "North",  # Direction-independent: should still detect ambulance on South!
     }
     res = client.post("/api/analyze", data=data, content_type="multipart/form-data")
     assert res.status_code == 200
     json_data = res.get_json()["data"]
 
-    # Dual condition fails: South has vehicle but not siren; North has siren but not vehicle
-    assert json_data["emergency_active"] is False
-    assert json_data["emergency_road"] is None
-    assert json_data["emergency_plan"] is None
+    # Direction-independent priority: South is automatically identified and granted priority
+    assert json_data["emergency_active"] is True
+    assert json_data["emergency_road"] == "South"
+    assert json_data["emergency_plan"] is not None
+    assert json_data["emergency_plan"]["emergency_road"] == "South"
 
-    assert json_data["results"]["South"]["emergency_active"] is False
+    south_res = json_data["results"]["South"]
+    assert south_res["emergency_active"] is True
+    assert south_res["emergency_priority_confirmed"] is True
+    assert south_res["status_color"] == "green"
+    assert "emergency priority confirmed" in south_res["status_label"].lower()
+
+    # Other directions remain normal adaptive
     assert json_data["results"]["North"]["emergency_active"] is False
+    assert json_data["results"]["East"]["emergency_active"] is False
+    assert json_data["results"]["West"]["emergency_active"] is False
+
 
 
 # ===========================================================================

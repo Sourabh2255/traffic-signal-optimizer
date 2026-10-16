@@ -20,6 +20,8 @@ from ultralytics import YOLO
 from utils.config import (
     EMERGENCY_MODEL_PATH,
     EMERGENCY_CONFIDENCE_THRESHOLD,
+    EMERGENCY_IMGSZ,
+    EMERGENCY_IOU_THRESHOLD,
     EMERGENCY_CLASSES,
 )
 
@@ -64,6 +66,8 @@ class EmergencyDetector:
             "loaded": loaded,
             "classes": names,
             "confidence_threshold": EMERGENCY_CONFIDENCE_THRESHOLD,
+            "imgsz": EMERGENCY_IMGSZ,
+            "iou": EMERGENCY_IOU_THRESHOLD,
             "error": cls._load_error,
         }
 
@@ -126,7 +130,8 @@ class EmergencyDetector:
             results = self.model.predict(
                 source=image_path,
                 conf=threshold,
-                imgsz=640,
+                iou=EMERGENCY_IOU_THRESHOLD,
+                imgsz=EMERGENCY_IMGSZ,
                 verbose=False,
             )
         except Exception as e:

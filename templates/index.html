@@ -224,25 +224,26 @@
                                 <span class="siren-icon">🚨</span>
                                 <div>
                                     <h3 class="siren-title">Emergency Siren Audio (Optional — WAV)</h3>
-                                    <p class="siren-desc">Acoustic sensor validation. Select which direction the recording is associated with.</p>
+                                    <p class="siren-desc">Acoustic sensor validation. Omnidirectional intersection acoustic sensor automatically scans all four approaches.</p>
                                 </div>
                             </div>
-                            <div class="siren-badge">Optional Acoustic Check</div>
+                            <div class="siren-badge">Omnidirectional Acoustic Check</div>
                         </div>
 
                         <div class="siren-controls-grid">
                             <!-- Direction selector for audio -->
                             <div class="siren-selector-box">
                                 <label for="siren-direction-select" class="control-label">
-                                    Associated Approach Direction:
+                                    Acoustic Sensor Target:
                                 </label>
                                 <select id="siren-direction-select" name="siren_direction" class="select-input">
-                                    <option value="South" selected>South Direction (Typical Demo)</option>
-                                    <option value="North">North Direction</option>
-                                    <option value="East">East Direction</option>
-                                    <option value="West">West Direction</option>
+                                    <option value="Auto" selected>⚡ Auto-Scan All Approaches (Direction-Independent)</option>
+                                    <option value="South">South Approach (Optional Scope)</option>
+                                    <option value="North">North Approach (Optional Scope)</option>
+                                    <option value="East">East Approach (Optional Scope)</option>
+                                    <option value="West">West Approach (Optional Scope)</option>
                                 </select>
-                                <p class="control-hint">The audio classifier result will be evaluated specifically against this direction's visual feed.</p>
+                                <p class="control-hint">Direction-Independent: When a siren is confirmed, the system inspects all 4 directional feeds to locate emergency vehicles.</p>
                             </div>
 
                             <!-- WAV File Upload -->

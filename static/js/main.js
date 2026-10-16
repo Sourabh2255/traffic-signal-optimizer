@@ -568,24 +568,22 @@
         if (hasEmergency) {
             emergencyAlertBanner.className = "emergency-banner banner-green";
             bannerIcon.textContent = "🚨";
-            bannerHeading.textContent = `EMERGENCY VEHICLE PREEMPTION ACTIVATED — ${data.emergency_road.toUpperCase()} ROAD`;
-            bannerReason.textContent = "Emergency confirmed — safely prioritizing the selected direction.";
-            bannerBadge.textContent = "EMERGENCY CONFIRMED";
+            bannerHeading.textContent = `EMERGENCY VEHICLE PREEMPTION ACTIVATED — ${data.emergency_road.toUpperCase()} APPROACH`;
+            bannerReason.textContent = emAnalysis.reason || `Emergency confirmed — safely prioritizing ${data.emergency_road} direction.`;
+            bannerBadge.textContent = "EMERGENCY PRIORITY CONFIRMED";
         } else if (sirenAnalysis.is_siren) {
-            // Siren was detected, but no confirmed vehicle in that direction
+            // Siren was detected, but no confirmed vehicle or ambiguous
             emergencyAlertBanner.className = "emergency-banner banner-amber";
             bannerIcon.textContent = "⚠️";
-            bannerHeading.textContent = "ACOUSTIC SIREN DETECTED WITHOUT VISUAL CONFIRMATION";
-            bannerReason.textContent = "Siren detected, but no emergency vehicle was confirmed in the selected direction.";
-            bannerBadge.textContent = "ATTENTION REQUIRED";
+            bannerHeading.textContent = emAnalysis.is_ambiguous ? "AMBIGUOUS MULTI-DIRECTION EMERGENCY DETECTED" : "ACOUSTIC SIREN DETECTED WITHOUT VISUAL CONFIRMATION";
+            bannerReason.textContent = emAnalysis.reason || "Siren detected — searching all directions for emergency vehicles.";
+            bannerBadge.textContent = emAnalysis.is_ambiguous ? "AMBIGUOUS CANDIDATES" : "SEARCHING ALL DIRECTIONS";
         } else {
             // Normal adaptive mode
             emergencyAlertBanner.className = "emergency-banner banner-blue";
             bannerIcon.textContent = "ℹ️";
             bannerHeading.textContent = "Normal Adaptive Signal Optimization Active";
-            bannerReason.textContent = sirenAnalysis.provided 
-                ? "Emergency vehicle detected, but siren confirmation is missing."
-                : "No siren audio provided — normal adaptive mode.";
+            bannerReason.textContent = emAnalysis.reason || "Normal adaptive mode: signal timing optimized based on vehicular queue.";
             bannerBadge.textContent = "NORMAL ADAPTIVE";
         }
 
@@ -595,7 +593,7 @@
             emergencyAnalysisPanel.style.display = "block";
 
             if (emAuditDirection) {
-                emAuditDirection.innerHTML = `<span class="badge-dir">${ea.selected_direction || "South"}</span>`;
+                emAuditDirection.innerHTML = `<span class="badge-dir">${ea.selected_direction || ea.emergency_road || "All Approaches (Auto-Scan)"}</span>`;
             }
 
             if (emAuditAmbulance) {

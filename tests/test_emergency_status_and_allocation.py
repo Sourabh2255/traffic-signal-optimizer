@@ -177,25 +177,34 @@ def test_4_siren_without_emergency_vehicle(client):
 
 
 # ===========================================================================
-# 5. Emergency vehicle and siren in different directions: do not grant priority
 # ===========================================================================
-def test_5_different_directions_mismatch(client):
+# 5. Direction-independent auto-scan: Siren confirmed without user selecting East
+# ===========================================================================
+def test_5_direction_independent_auto_scan(client):
+    """
+    Direction-Independent Auto-Scan:
+    Ambulance on East Approach, siren audio provided with arbitrary or default direction (e.g. West).
+    The system scans all 4 directions, finds the ambulance on East, and grants priority to East.
+    """
     data = {
         "north": (get_normal_image_bytes(), "north.jpg"),
         "east": (get_ambulance_image_bytes(), "Ambulance.jpg"),  # Vehicle on East
         "south": (get_normal_image_bytes(), "south.jpg"),
         "west": (get_normal_image_bytes(), "west.jpg"),
         "siren_audio": (get_siren_audio_bytes(), "ambulance_siren.wav"),
-        "siren_direction": "West",  # Siren assigned to West (mismatch!)
+        "siren_direction": "West",  # Arbitrary direction: auto-scan should still find East!
     }
     res = client.post("/api/analyze", data=data, content_type="multipart/form-data")
     assert res.status_code == 200
     json_data = res.get_json()["data"]
 
-    assert json_data["emergency_active"] is False
-    assert json_data["emergency_road"] is None
-    assert json_data["results"]["East"]["emergency_active"] is False
+    # East direction is automatically prioritized
+    assert json_data["emergency_active"] is True
+    assert json_data["emergency_road"] == "East"
+    assert json_data["results"]["East"]["emergency_active"] is True
+    assert json_data["results"]["East"]["emergency_priority_confirmed"] is True
     assert json_data["results"]["West"]["emergency_active"] is False
+
 
 
 # ===========================================================================
@@ -350,7 +359,7 @@ if __name__ == "__main__":
             ("Case 2: Fire Truck + Siren on North", test_2_firetruck_confirmed_siren_on_north),
             ("Case 3: Ambulance without Siren (Pending Candidate)", test_3_ambulance_without_confirmed_siren),
             ("Case 4: Siren without Emergency Vehicle", test_4_siren_without_emergency_vehicle),
-            ("Case 5: Mismatched Direction", test_5_different_directions_mismatch),
+            ("Case 5: Direction-Independent Auto-Scan", test_5_direction_independent_auto_scan),
             ("Case 6: No Emergency (Normal Adaptive)", test_6_no_emergency_normal_adaptive),
             ("Case 7: Emergency Clears (Safe Normal Return)", test_7_emergency_clears_returns_to_normal),
             ("Case 8: Configured Green-Time Limits Enforced", test_8_green_time_limits_enforced),

@@ -129,7 +129,9 @@ SIREN_CONFIDENCE_THRESHOLD = 0.55
 # Custom Emergency Vehicle YOLO Detector (Ambulance & Fire Truck)
 # ---------------------------------------------------------------------------
 EMERGENCY_MODEL_PATH = os.path.join(MODELS_FOLDER, "best_emergency_vehicle.pt")
-EMERGENCY_CONFIDENCE_THRESHOLD = 0.10
+EMERGENCY_CONFIDENCE_THRESHOLD = 0.15
+EMERGENCY_IMGSZ = 1280
+EMERGENCY_IOU_THRESHOLD = 0.40
 EMERGENCY_CLASSES = {0: "Ambulance", 1: "Fire Truck"}
 
 # Emergency vehicle options for UI forms:

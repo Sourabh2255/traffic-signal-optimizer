@@ -39,7 +39,8 @@ from traffic.demand import calculate_demand
 from traffic.timing import clamp_green_time, get_safe_fallback_green_time
 from traffic.signal_controller import build_cycle_plan
 from traffic.emergency_controller import (
-    is_emergency_active, build_emergency_plan, evaluate_emergency_candidate
+    is_emergency_active, build_emergency_plan, evaluate_emergency_candidate,
+    resolve_emergency_priority,
 )
 from traffic.comparison import compare_fixed_vs_adaptive
 
@@ -164,25 +165,21 @@ def execute_analysis(files, form):
         return None, (f"Missing image for direction: {missing_str}. All four direction images (North, East, South, West) are required before analysis.", 400)
 
     # Process optional siren audio
-    # Accept siren_audio, audio, or direction-specific audio_south, etc.
+    # The siren audio represents an omnidirectional acoustic sensor for the intersection.
     audio_file = files.get("siren_audio") or files.get("audio") or files.get("audio_file")
-    siren_direction = form.get("siren_direction", form.get("audio_direction", "South"))
+    siren_direction_hint = form.get("siren_direction", form.get("audio_direction", "Auto"))
     if not audio_file or audio_file.filename == "":
         for r in ROADS:
             candidate_audio = files.get(f"audio_{r.lower()}")
             if candidate_audio and candidate_audio.filename != "":
                 audio_file = candidate_audio
-                siren_direction = r
+                siren_direction_hint = r
                 break
-
-    siren_direction = str(siren_direction).strip().title()
-    if siren_direction not in ROADS:
-        siren_direction = "South"
 
     siren_analysis = {
         "provided": False,
         "filename": None,
-        "direction": siren_direction,
+        "direction": "Omnidirectional",
         "is_siren": False,
         "confidence": None,
         "error": None,
@@ -193,7 +190,7 @@ def execute_analysis(files, form):
             return None, ("Invalid audio format. Emergency siren audio must be a WAV file (.wav).", 400)
 
         ext = audio_file.filename.rsplit(".", 1)[1].lower()
-        unique_audio_name = f"siren_{siren_direction.lower()}_{uuid.uuid4().hex[:6]}.{ext}"
+        unique_audio_name = f"siren_audio_{uuid.uuid4().hex[:6]}.{ext}"
         audio_path = os.path.join(UPLOAD_FOLDER, unique_audio_name)
         audio_file.save(audio_path)
         siren_analysis["provided"] = True
@@ -216,6 +213,7 @@ def execute_analysis(files, form):
     analysis_results = {}
     green_times = {}
     counts_by_road = {}
+    road_candidates = {}
 
     for road in ROADS:
         filename = saved_filenames[road]
@@ -305,135 +303,109 @@ def execute_analysis(files, form):
         green_times[road] = final_green_time
         counts_by_road[road] = counts
 
-        # 6. Strict AND-Condition Emergency Priority Check
-        is_audio_direction = siren_analysis["provided"] and (siren_direction == road)
-        has_em_vehicle = em_detected and (detected_conf is not None and detected_conf >= EMERGENCY_CONFIDENCE_THRESHOLD)
-        has_siren_audio = is_audio_direction and siren_analysis["is_siren"] and (
+        road_candidates[road] = {
+            "road": road,
+            "detected": em_detected,
+            "vehicle_type": emergency_vehicle_type,
+            "confidence": detected_conf,
+            "box": em_summary.get("box"),
+            "detections": em_summary.get("detections", []),
+            "ambulance_detected": bool(em_summary.get("ambulance_detected", False) or (em_detected and emergency_vehicle_type == "Ambulance")),
+            "fire_truck_detected": bool(em_summary.get("fire_truck_detected", False) or (em_detected and emergency_vehicle_type == "Fire Truck")),
+            "counts": counts,
+            "filename": filename,
+            "processed_filename": processed_filename,
+            "density": density,
+            "demand": demand,
+            "waiting_time": waiting_time,
+            "max_green": max_green,
+            "min_green": min_green,
+            "final_green_time": final_green_time,
+            "raw_pred": raw_pred,
+            "fallback_used": fallback_used,
+        }
+
+    # 6. Direction-Independent Siren & Emergency Priority Resolution
+    # Evaluates omnidirectional acoustic siren against YOLO detections across ALL 4 approaches
+    siren_confirmed = bool(
+        siren_analysis["is_siren"] and (
             siren_analysis["confidence"] is not None and siren_analysis["confidence"] >= SIREN_CONFIDENCE_THRESHOLD
         )
+    )
 
-        emergency_priority_confirmed = False
-        if siren_analysis["provided"]:
-            if is_audio_direction:
-                if has_em_vehicle and has_siren_audio:
-                    emergency_priority_confirmed = True
-                    status_color = "green"
-                    status_label = "Emergency Priority Confirmed"
-                    status_message = "Emergency confirmed — safely prioritizing the selected direction."
-                elif has_siren_audio and not has_em_vehicle:
-                    emergency_priority_confirmed = False
-                    status_color = "amber"
-                    status_label = "Siren Detected (No Vehicle)"
-                    status_message = "Siren detected, but no emergency vehicle was confirmed in the selected direction."
-                elif has_em_vehicle and not has_siren_audio:
-                    emergency_priority_confirmed = False
-                    status_color = "amber"
-                    status_label = "Vehicle Detected (No Siren)"
-                    status_message = "Emergency vehicle detected, but siren confirmation is missing."
-                else:
-                    emergency_priority_confirmed = False
-                    status_color = "blue"
-                    status_label = "Normal Adaptive Mode"
-                    status_message = "Normal adaptive mode: No emergency vehicle or siren detected."
-            else:
-                # Other directions when siren audio was provided for a different road
-                if has_em_vehicle:
-                    emergency_priority_confirmed = False
-                    status_color = "amber"
-                    status_label = "Vehicle Detected (No Siren Audio)"
-                    status_message = "Emergency vehicle detected, but siren confirmation is missing."
-                else:
-                    emergency_priority_confirmed = False
-                    status_color = "blue"
-                    status_label = "Normal Adaptive Mode"
-                    status_message = "Normal adaptive mode."
-        else:
-            # No siren WAV was provided at all
-            if has_em_vehicle:
-                emergency_priority_confirmed = False
-                status_color = "amber"
-                status_label = "Vehicle Detected (No Siren Audio)"
-                status_message = "Emergency vehicle detected, but siren confirmation is missing."
-            else:
-                emergency_priority_confirmed = False
-                status_color = "blue"
-                status_label = "Normal Adaptive Mode"
-                status_message = "No siren audio provided — normal adaptive mode."
+    priority_res = resolve_emergency_priority(
+        siren_confirmed=siren_confirmed,
+        road_candidates=road_candidates,
+        siren_confidence=siren_analysis["confidence"],
+        siren_provided=siren_analysis["provided"],
+        min_vehicle_conf=EMERGENCY_CONFIDENCE_THRESHOLD,
+    )
 
-        # Evaluate candidate for structured log compatibility
+    emergency_road = priority_res["emergency_road"]
+    vehicle_type = priority_res["vehicle_type"]
+    vehicle_confidence = priority_res["vehicle_confidence"]
+
+    if emergency_road:
+        siren_analysis["direction"] = emergency_road
+
+    # Populate directional analysis results using the unified resolution
+    for road in ROADS:
+        cand = road_candidates[road]
+        road_status = priority_res["road_statuses"][road]
+        em_detected = cand["detected"]
+
         emergency_eval = evaluate_emergency_candidate(
-            vehicle_type=emergency_vehicle_type,
-            vehicle_confidence=detected_conf,
-            siren_detected=siren_analysis["is_siren"] if is_audio_direction else False,
-            siren_confidence=siren_analysis["confidence"] if is_audio_direction else None,
+            vehicle_type=cand["vehicle_type"],
+            vehicle_confidence=cand["confidence"],
+            siren_detected=siren_analysis["is_siren"],
+            siren_confidence=siren_analysis["confidence"],
             road=road,
         )
 
         analysis_results[road] = {
             "direction": road,
-            "original": filename,
-            "original_url": url_for("uploaded_file", filename=filename),
-            "processed": processed_filename,
-            "processed_url": url_for("uploaded_file", filename=processed_filename),
-            "counts": counts,
-            "total_vehicles": counts["total"],
-            "ordinary_vehicles": counts["total"],
+            "original": cand["filename"],
+            "original_url": url_for("uploaded_file", filename=cand["filename"]),
+            "processed": cand["processed_filename"],
+            "processed_url": url_for("uploaded_file", filename=cand["processed_filename"]),
+            "counts": cand["counts"],
+            "total_vehicles": cand["counts"]["total"],
+            "ordinary_vehicles": cand["counts"]["total"],
             "emergency_vehicle_count": 1 if em_detected else 0,
-            "no_vehicles": counts["total"] == 0,
-            "density": density,
-            "demand_score": demand,
-            "waiting_time": waiting_time,
-            "max_green_time": max_green,
-            "recommended_green_time": final_green_time,
-            "green_time": final_green_time,
-            "raw_predicted_green_time": raw_pred,
+            "no_vehicles": cand["counts"]["total"] == 0,
+            "density": cand["density"],
+            "demand_score": cand["demand"],
+            "waiting_time": cand["waiting_time"],
+            "max_green_time": cand["max_green"],
+            "recommended_green_time": cand["final_green_time"],
+            "green_time": cand["final_green_time"],
+            "raw_predicted_green_time": cand["raw_pred"],
             "prediction": {
-                "raw_prediction": raw_pred,
-                "final_green_time": final_green_time,
-                "fallback_used": fallback_used,
+                "raw_prediction": cand["raw_pred"],
+                "final_green_time": cand["final_green_time"],
+                "fallback_used": cand["fallback_used"],
             },
             "emergency_detected": em_detected,
             "emergency_vehicle_detected": em_detected,
-            "emergency_candidate_pending": bool(em_detected and not emergency_priority_confirmed),
-            "ambulance_detected": em_summary.get("ambulance_detected", False),
-            "fire_truck_detected": em_summary.get("fire_truck_detected", False),
-            "emergency_vehicle_type": emergency_vehicle_type,
-            "emergency_confidence": detected_conf,
-            "emergency_box": em_summary.get("box"),
+            "emergency_candidate_pending": bool(em_detected and not road_status["emergency_priority_confirmed"]),
+            "ambulance_detected": cand["ambulance_detected"],
+            "fire_truck_detected": cand["fire_truck_detected"],
+            "emergency_vehicle_type": cand["vehicle_type"],
+            "emergency_confidence": cand["confidence"],
+            "emergency_box": cand["box"],
             "emergency_eval": emergency_eval,
             "siren": {
                 "provided": siren_analysis["provided"],
-                "is_siren": siren_analysis["is_siren"] if is_audio_direction else False,
-                "confidence": siren_analysis["confidence"] if is_audio_direction else None,
-                "direction": siren_direction if is_audio_direction else None,
+                "is_siren": siren_analysis["is_siren"],
+                "confidence": siren_analysis["confidence"],
+                "direction": emergency_road or "Omnidirectional",
             },
-            "emergency_active": emergency_priority_confirmed,
-            "emergency_priority_confirmed": emergency_priority_confirmed,
-            "status_color": status_color,
-            "status_label": status_label,
-            "status_message": status_message,
+            "emergency_active": road_status["emergency_active"],
+            "emergency_priority_confirmed": road_status["emergency_priority_confirmed"],
+            "status_color": road_status["status_color"],
+            "status_label": road_status["status_label"],
+            "status_message": road_status["status_message"],
         }
-
-    # Identify confirmed emergency candidate road
-    emergency_road = None
-    vehicle_type = None
-    vehicle_confidence = None
-
-    for road, r in analysis_results.items():
-        if r["emergency_active"]:
-            emergency_road = road
-            vehicle_type = r["emergency_vehicle_type"]
-            vehicle_confidence = r["emergency_confidence"]
-            STATE["emergency_log"].append({
-                "time": datetime.now().strftime("%H:%M:%S"),
-                "vehicle": vehicle_type,
-                "road": road,
-                "vehicle_confidence": f"{vehicle_confidence:.2f}" if vehicle_confidence else "N/A",
-                "siren": "ON",
-                "siren_confidence": f"{siren_analysis['confidence']:.2f}" if siren_analysis["confidence"] else "N/A",
-                "action": "SAFETY TRANSITION -> GREEN",
-            })
-            break
 
     # Recalculate signal allocation whenever emergency priority is confirmed:
     # Set the prioritized direction to EMERGENCY_GREEN_SECONDS (25s), strictly bounded by [min_green, max_green].
@@ -447,6 +419,16 @@ def execute_analysis(files, form):
         if "prediction" in analysis_results[emergency_road]:
             analysis_results[emergency_road]["prediction"]["final_green_time"] = allocated_emergency_green
 
+        STATE["emergency_log"].append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "vehicle": vehicle_type,
+            "road": emergency_road,
+            "vehicle_confidence": f"{vehicle_confidence:.2f}" if vehicle_confidence else "N/A",
+            "siren": "ON",
+            "siren_confidence": f"{siren_analysis['confidence']:.2f}" if siren_analysis["confidence"] else "N/A",
+            "action": "SAFETY TRANSITION -> GREEN",
+        })
+
     cycle_plan = build_cycle_plan(green_times, cycle_number, emergency_road=emergency_road)
     emergency_plan = None
     if emergency_road:
@@ -457,36 +439,60 @@ def execute_analysis(files, form):
             vehicle_confidence=vehicle_confidence,
         )
 
-    # Build dedicated emergency analysis summary for debugging panel (Task 5)
-    selected_result = analysis_results.get(siren_direction, {})
-    confirmed = bool(emergency_road is not None)
-
-    if confirmed:
-        analysis_reason = "Emergency confirmed — safely prioritizing the selected direction."
-    elif siren_analysis["is_siren"] and not selected_result.get("emergency_detected", False):
-        analysis_reason = "Siren detected, but no emergency vehicle was confirmed in the selected direction."
-    elif selected_result.get("emergency_detected", False) and not siren_analysis["is_siren"]:
-        analysis_reason = "Emergency vehicle detected, but siren confirmation is missing."
+    # Build dedicated emergency analysis summary for dashboard and audit
+    if emergency_road:
+        prioritized_res = analysis_results.get(emergency_road, {})
+        emergency_analysis = {
+            "selected_direction": emergency_road,
+            "ambulance_detected": prioritized_res.get("ambulance_detected", False),
+            "fire_truck_detected": prioritized_res.get("fire_truck_detected", False),
+            "emergency_detected": True,
+            "emergency_vehicle_type": vehicle_type or "Ambulance",
+            "emergency_confidence": vehicle_confidence,
+            "siren_provided": siren_analysis["provided"],
+            "siren_detected": siren_analysis["is_siren"],
+            "siren_confidence": siren_analysis["confidence"],
+            "confirmed": True,
+            "emergency_road": emergency_road,
+            "outcome_case": priority_res["outcome_case"],
+            "is_ambiguous": False,
+            "reason": priority_res["reason"],
+            "detailed_reason": priority_res["detailed_reason"],
+            "annotated_url": prioritized_res.get("processed_url"),
+            "original_url": prioritized_res.get("original_url"),
+            "box": prioritized_res.get("emergency_box"),
+        }
     else:
-        analysis_reason = "No emergency vehicle or siren detected in the selected direction."
+        top_cand = priority_res["confirmed_candidates"][0] if priority_res["confirmed_candidates"] else (
+            priority_res["all_detected_vehicles"][0] if priority_res["all_detected_vehicles"] else None
+        )
+        cand_res = analysis_results.get(top_cand["road"], {}) if top_cand else {}
+        selected_dir = (
+            ", ".join(priority_res["confirmed_directions"])
+            if priority_res["confirmed_directions"]
+            else "All Approaches (Auto-Scan)"
+        )
 
-    emergency_analysis = {
-        "selected_direction": siren_direction,
-        "ambulance_detected": selected_result.get("ambulance_detected", False),
-        "fire_truck_detected": selected_result.get("fire_truck_detected", False),
-        "emergency_detected": selected_result.get("emergency_detected", False),
-        "emergency_vehicle_type": selected_result.get("emergency_vehicle_type", "None"),
-        "emergency_confidence": selected_result.get("emergency_confidence"),
-        "siren_provided": siren_analysis["provided"],
-        "siren_detected": siren_analysis["is_siren"],
-        "siren_confidence": siren_analysis["confidence"],
-        "confirmed": confirmed,
-        "emergency_road": emergency_road,
-        "reason": analysis_reason,
-        "annotated_url": selected_result.get("processed_url"),
-        "original_url": selected_result.get("original_url"),
-        "box": selected_result.get("emergency_box"),
-    }
+        emergency_analysis = {
+            "selected_direction": selected_dir,
+            "ambulance_detected": any(r.get("ambulance_detected", False) for r in analysis_results.values()),
+            "fire_truck_detected": any(r.get("fire_truck_detected", False) for r in analysis_results.values()),
+            "emergency_detected": bool(top_cand is not None),
+            "emergency_vehicle_type": top_cand["vehicle_type"] if top_cand else "None",
+            "emergency_confidence": top_cand["confidence"] if top_cand else None,
+            "siren_provided": siren_analysis["provided"],
+            "siren_detected": siren_analysis["is_siren"],
+            "siren_confidence": siren_analysis["confidence"],
+            "confirmed": False,
+            "emergency_road": None,
+            "outcome_case": priority_res["outcome_case"],
+            "is_ambiguous": priority_res.get("is_ambiguous", False),
+            "reason": priority_res["reason"],
+            "detailed_reason": priority_res["detailed_reason"],
+            "annotated_url": cand_res.get("processed_url"),
+            "original_url": cand_res.get("original_url"),
+            "box": cand_res.get("emergency_box"),
+        }
 
     latest_analysis = {
         "cycle_number": cycle_number,
