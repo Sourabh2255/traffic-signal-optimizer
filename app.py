@@ -44,7 +44,8 @@ from traffic.emergency_controller import (
     is_emergency_active, build_emergency_plan, evaluate_emergency_candidate,
     resolve_emergency_priority,
 )
-from traffic.comparison import compare_fixed_vs_adaptive
+import io
+from traffic.comparison import compare_fixed_vs_adaptive, evaluate_traffic_impact
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
@@ -683,28 +684,94 @@ def plot_file(filename):
 # ---------------------------------------------------------------------------
 # Page 3 — Simulation
 # ---------------------------------------------------------------------------
+def load_and_execute_demo(scenario="normal"):
+    """Loads bundled benchmark demo assets and runs the AI analysis pipeline."""
+    from werkzeug.datastructures import FileStorage
+    img_dir = os.path.join(DATA_FOLDER, "emergency_yolo", "test", "images")
+    audio_dir = os.path.join(DATA_FOLDER, "audio")
+
+    if scenario == "emergency":
+        files_map = {
+            "north": os.path.join(img_dir, "1478019957687018435_jpg.rf.1337211ed85fd3098d01e02cfd8d68d8.jpg"),
+            "east": os.path.join(img_dir, "1478020431196343477_jpg.rf.86bf50c272bf7e4ccb6404974247b130.jpg"),
+            "south": os.path.join(img_dir, "back_134_jpeg_jpg.rf.771c3c3c2cc150b90705d8d6e96473f1.jpg"),
+            "west": os.path.join(img_dir, "1478020491698266386_jpg.rf.cc7f10b1511352c8c8b2ae377747dc5e.jpg"),
+            "siren_audio": os.path.join(audio_dir, "siren", "siren_000.wav"),
+        }
+    else:
+        files_map = {
+            "north": os.path.join(img_dir, "1478019957687018435_jpg.rf.1337211ed85fd3098d01e02cfd8d68d8.jpg"),
+            "east": os.path.join(img_dir, "1478020431196343477_jpg.rf.86bf50c272bf7e4ccb6404974247b130.jpg"),
+            "south": os.path.join(img_dir, "1478020512707283286_jpg.rf.9f3d00b99058a0675b8a638096accabf.jpg"),
+            "west": os.path.join(img_dir, "1478020491698266386_jpg.rf.cc7f10b1511352c8c8b2ae377747dc5e.jpg"),
+        }
+
+    file_storages = {}
+    for key, fpath in files_map.items():
+        if fpath and os.path.exists(fpath):
+            with open(fpath, "rb") as fp:
+                file_storages[key] = FileStorage(
+                    stream=io.BytesIO(fp.read()),
+                    filename=os.path.basename(fpath),
+                    content_type="audio/wav" if key == "siren_audio" else "image/jpeg",
+                )
+
+    form_dict = {
+        "emergency_north": "Auto-Detect",
+        "emergency_east": "Auto-Detect",
+        "emergency_south": "Auto-Detect",
+        "emergency_west": "Auto-Detect",
+        "siren_version": "v1",
+    }
+    result_data, err = execute_analysis(file_storages, form_dict)
+    if result_data:
+        result_data["is_demo"] = True
+        result_data["demo_name"] = (
+            "Emergency Priority Scenario (Ambulance + Siren)"
+            if scenario == "emergency"
+            else "Standard Adaptive Traffic Scenario"
+        )
+    return result_data, err
+
+
 @app.route("/simulate")
 def simulate():
+    demo_type = request.args.get("demo")
+    if demo_type in ["normal", "emergency"]:
+        result_data, err = load_and_execute_demo(demo_type)
+        if err:
+            flash(f"Error loading demo scenario: {err[0]}")
+        else:
+            flash(
+                f"Demo benchmark dataset loaded: "
+                f"{'Emergency Priority (Ambulance + Siren)' if demo_type == 'emergency' else 'Standard Adaptive Traffic'}"
+            )
+        return redirect(url_for("simulate"))
+
     analysis = STATE["latest_analysis"]
     if analysis is None:
-        flash("Run an analysis first (upload images) before starting a simulation.")
-        return redirect(url_for("index"))
+        return render_template(
+            "simulation.html",
+            app_name=APP_NAME,
+            analysis=None,
+            cycle_plan=None,
+            emergency_plan=None,
+            cycle_number=0,
+            impact_assessment=None,
+            is_demo=False,
+            fixed_signal_time=FIXED_SIGNAL_TIME,
+        )
 
-    cycle_plan = build_cycle_plan(analysis["green_times"], analysis["cycle_number"])
+    emergency_road = analysis.get("emergency_road")
+    cycle_plan = analysis.get("cycle_plan") or build_cycle_plan(
+        analysis["green_times"], analysis["cycle_number"], emergency_road=emergency_road
+    )
+    emergency_plan = analysis.get("emergency_plan")
 
-    emergency_road = None
-    emergency_plan = None
-    vehicle_type = None
-    vehicle_confidence = None
-
-    for road, r in analysis["results"].items():
-        if r["emergency_active"]:
-            emergency_road = road
-            vehicle_type = r["emergency_vehicle_type"]
-            vehicle_confidence = r.get("emergency_confidence")
-            break
-
-    if emergency_road:
+    if emergency_road and not emergency_plan:
+        prioritized_res = analysis["results"].get(emergency_road, {})
+        vehicle_type = prioritized_res.get("emergency_vehicle_type", "Ambulance")
+        vehicle_confidence = prioritized_res.get("emergency_confidence")
         emergency_plan = build_emergency_plan(
             current_road=ROADS[0],
             emergency_road=emergency_road,
@@ -712,12 +779,18 @@ def simulate():
             vehicle_confidence=vehicle_confidence,
         )
 
+    impact_assessment = evaluate_traffic_impact(analysis)
+
     return render_template(
         "simulation.html",
         app_name=APP_NAME,
+        analysis=analysis,
         cycle_plan=cycle_plan,
         emergency_plan=emergency_plan,
         cycle_number=analysis["cycle_number"],
+        impact_assessment=impact_assessment,
+        is_demo=analysis.get("is_demo", False),
+        fixed_signal_time=FIXED_SIGNAL_TIME,
     )
 
 
