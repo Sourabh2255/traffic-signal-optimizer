@@ -439,11 +439,6 @@
                 const audioFilename = preset.siren_audio.split("/").pop();
                 const audioFile = new File([audioBlob], audioFilename, { type: "audio/wav" });
                 processSelectedAudio(audioFile);
-
-                const dirSelect = document.getElementById("siren-direction-select");
-                if (dirSelect && preset.siren_direction) {
-                    dirSelect.value = preset.siren_direction;
-                }
             } else {
                 window.removeAudioFile();
             }
@@ -489,9 +484,9 @@
             formData.append("siren_audio", filesState.siren);
         }
 
-        const sirenDirSelect = document.getElementById("siren-direction-select");
-        if (sirenDirSelect) {
-            formData.append("siren_direction", sirenDirSelect.value);
+        const sirenVerSelect = document.getElementById("siren-version-select");
+        if (sirenVerSelect) {
+            formData.append("siren_version", sirenVerSelect.value);
         }
 
         // Show loading overlay with animated progress steps
@@ -621,6 +616,19 @@
                 emAuditSirenConf.textContent = (ea.siren_confidence !== null && ea.siren_confidence !== undefined)
                     ? `${(ea.siren_confidence * 100).toFixed(1)}%`
                     : "N/A";
+            }
+
+            const emAuditSirenType = document.getElementById("em-audit-siren-type");
+            if (emAuditSirenType) {
+                if (ea.siren_type) {
+                    const typeLabel = ea.siren_type.replace(/_/g, " ").toUpperCase();
+                    emAuditSirenType.innerHTML = `<span class="val-tag tag-yes">${typeLabel}</span>`;
+                } else if (data.siren_analysis && data.siren_analysis.predicted_class) {
+                    const classLabel = data.siren_analysis.predicted_class.replace(/_/g, " ").toUpperCase();
+                    emAuditSirenType.innerHTML = `<span class="val-tag ${data.siren_analysis.is_siren ? 'tag-yes' : 'tag-no'}">${classLabel}</span>`;
+                } else {
+                    emAuditSirenType.textContent = ea.siren_detected ? "Confirmed Siren" : "--";
+                }
             }
 
             if (emAuditConfirmation) {

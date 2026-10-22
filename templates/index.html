@@ -231,17 +231,12 @@
                         </div>
 
                         <div class="siren-controls-grid">
-                            <!-- Direction selector for audio -->
+                            <!-- Siren Model Version selector -->
                             <div class="siren-selector-box">
-                                <label for="siren-direction-select" class="control-label">
-                                    Acoustic Sensor Target:
-                                </label>
-                                <select id="siren-direction-select" name="siren_direction" class="select-input">
-                                    <option value="Auto" selected>⚡ Auto-Scan All Approaches (Direction-Independent)</option>
-                                    <option value="South">South Approach (Optional Scope)</option>
-                                    <option value="North">North Approach (Optional Scope)</option>
-                                    <option value="East">East Approach (Optional Scope)</option>
-                                    <option value="West">West Approach (Optional Scope)</option>
+                                <label for="siren-version-select" class="control-label">Siren Model Version:</label>
+                                <select id="siren-version-select" name="siren_version" class="select-input">
+                                    <option value="v1" {% if siren_active_version == 'v1' %}selected{% endif %}>Baseline V1 (Random Forest — 26 Features)</option>
+                                    <option value="v2" {% if siren_active_version == 'v2' %}selected{% endif %}>Newly Integrated V2 (SVM Pipeline — 46 MFCC & Spectral Features)</option>
                                 </select>
                                 <p class="control-hint">Direction-Independent: When a siren is confirmed, the system inspects all 4 directional feeds to locate emergency vehicles.</p>
                             </div>
@@ -375,6 +370,10 @@
                                     <tr>
                                         <td><strong>Siren Confidence:</strong></td>
                                         <td id="em-audit-siren-conf">--</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Siren Classification:</strong></td>
+                                        <td id="em-audit-siren-type">--</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Emergency Confirmation:</strong></td>

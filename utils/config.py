@@ -116,7 +116,7 @@ WAITING_TIME_PER_CYCLE = 12
 MAX_SIMULATED_WAITING_TIME = 60
 
 # ---------------------------------------------------------------------------
-# Siren / Audio ML (Phase 10-11)
+# Siren / Audio ML (Phase 10-11 & Model V2 Integration)
 # ---------------------------------------------------------------------------
 SIREN_MODEL_PATH = os.path.join(MODELS_FOLDER, "siren_model.pkl")
 SIREN_DATA_DIR = os.path.join(DATA_FOLDER, "audio")
@@ -124,6 +124,34 @@ SIREN_SAMPLE_RATE = 22050
 SIREN_CLIP_SECONDS = 3
 N_MFCC = 13
 SIREN_CONFIDENCE_THRESHOLD = 0.55
+
+# Siren Model V2 settings (SVM pipeline on 46 MFCC + spectral features)
+SIREN_MODEL_V2_PATH = os.path.join(MODELS_FOLDER, "siren_model_v2.joblib")
+SIREN_V2_SAMPLE_RATE = 22050
+SIREN_V2_CLIP_SECONDS = 5.0
+SIREN_V2_N_MFCC = 20
+SIREN_V2_EXPECTED_FEATURES = 46
+SIREN_V2_CLASSES = ["ambulance_siren", "fire_truck_siren", "negative_sound"]
+SIREN_V2_CONFIDENCE_THRESHOLD = 0.50
+
+# Active siren detector version: 'v1' or 'v2'
+# Defaults to 'v1' to maintain existing detector behavior as fallback until tests pass
+SIREN_ACTIVE_VERSION = "v1"
+
+
+def get_siren_model_v2_path() -> str:
+    """Safely adapt path to siren_model_v2.joblib if located in models or elsewhere."""
+    candidates = [
+        SIREN_MODEL_V2_PATH,
+        os.path.join(BASE_DIR, "siren_model_v2.joblib"),
+        os.path.join(os.getcwd(), "models", "siren_model_v2.joblib"),
+        os.path.join(os.getcwd(), "siren_model_v2.joblib"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return SIREN_MODEL_V2_PATH
+
 
 # ---------------------------------------------------------------------------
 # Custom Emergency Vehicle YOLO Detector (Ambulance & Fire Truck)

@@ -594,20 +594,6 @@ body {
     }
 }
 
-.siren-direction-select-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.siren-direction-label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
 .select-control {
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
@@ -1896,14 +1882,29 @@ body {
 
 .siren-controls-grid {
     display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 20px;
+    grid-template-columns: minmax(300px, 360px) 1fr;
+    gap: 22px;
     align-items: center;
     margin-bottom: 16px;
 }
 
+.siren-selector-box {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.siren-upload-box {
+    min-width: 0;
+    width: 100%;
+}
+
 @media (max-width: 860px) {
-    .siren-controls-grid { grid-template-columns: 1fr; }
+    .siren-controls-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
 }
 
 .control-label {
@@ -1936,6 +1937,7 @@ body {
     font-size: 0.74rem;
     color: var(--text-dim);
     margin-top: 6px;
+    line-height: 1.4;
 }
 
 .audio-dropzone {
@@ -1968,6 +1970,53 @@ body {
     padding: 12px 16px;
     font-size: 0.84rem;
     color: #6ee7b7;
+}
+
+@media (max-width: 640px) {
+    .siren-section-card {
+        padding: 18px 16px;
+    }
+
+    .siren-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .siren-badge {
+        align-self: flex-start;
+    }
+
+    .siren-title {
+        font-size: 1.05rem;
+    }
+
+    .siren-desc {
+        font-size: 0.82rem;
+    }
+
+    .audio-dropzone {
+        min-height: 72px;
+        padding: 12px;
+    }
+
+    .audio-preview-card {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .audio-player-wrap,
+    .audio-element {
+        width: 100%;
+    }
+
+    .dual-rule-banner {
+        font-size: 0.8rem;
+        padding: 10px 14px;
+        line-height: 1.45;
+    }
 }
 
 /* Action Submit Bar */

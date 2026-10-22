@@ -29,6 +29,8 @@ from utils.config import (
     EMERGENCY_CONFIDENCE_THRESHOLD, EMERGENCY_CLASSES, MIN_GREEN, MAX_GREEN,
     SAFE_FALLBACK_GREEN_TIME, YELLOW_LIGHT_SECONDS, get_max_green_time,
     SIREN_CONFIDENCE_THRESHOLD, EMERGENCY_GREEN_SECONDS,
+    SIREN_MODEL_V2_PATH, SIREN_V2_CONFIDENCE_THRESHOLD, SIREN_ACTIVE_VERSION,
+    get_siren_model_v2_path,
 )
 from utils.validators import is_allowed_image, save_uploaded_image
 from detection.vehicle_detector import VehicleDetector
@@ -88,6 +90,11 @@ def _siren_model_available() -> bool:
     return os.path.exists(SIREN_MODEL_PATH)
 
 
+def _siren_model_v2_available() -> bool:
+    path = get_siren_model_v2_path()
+    return bool(path and os.path.exists(path))
+
+
 def _emergency_model_available() -> bool:
     return EmergencyDetector.is_available()
 
@@ -104,6 +111,8 @@ def index():
         emergency_types=EMERGENCY_VEHICLE_TYPES,
         ml_available=_ml_available(),
         siren_model_available=_siren_model_available(),
+        siren_model_v2_available=_siren_model_v2_available(),
+        siren_active_version=SIREN_ACTIVE_VERSION,
         emergency_model_available=_emergency_model_available(),
         emergency_model_info=EmergencyDetector.get_model_info(),
     )
@@ -126,13 +135,38 @@ def execute_analysis(files, form):
     from ml.predictor import GreenTimePredictor
     predictor = GreenTimePredictor()
 
+    siren_version_requested = form.get("siren_version", form.get("siren_model_version", SIREN_ACTIVE_VERSION)).lower()
     siren_detector = None
-    if _siren_model_available():
+    siren_version_used = "v1"
+
+    if siren_version_requested == "v2" and _siren_model_v2_available():
+        from audio.siren_detector_v2 import SirenDetectorV2
+        try:
+            siren_detector = SirenDetectorV2()
+            siren_version_used = "v2"
+        except Exception as e:
+            app.logger.warning(f"Could not initialize SirenDetectorV2, falling back to V1: {e}")
+            if _siren_model_available():
+                from audio.siren_detector import SirenDetector
+                try:
+                    siren_detector = SirenDetector()
+                    siren_version_used = "v1"
+                except Exception as ex:
+                    app.logger.warning(f"Could not initialize fallback SirenDetector: {ex}")
+    elif _siren_model_available():
         from audio.siren_detector import SirenDetector
         try:
             siren_detector = SirenDetector()
+            siren_version_used = "v1"
         except Exception as e:
             app.logger.warning(f"Could not initialize SirenDetector: {e}")
+            if _siren_model_v2_available():
+                from audio.siren_detector_v2 import SirenDetectorV2
+                try:
+                    siren_detector = SirenDetectorV2()
+                    siren_version_used = "v2"
+                except Exception as ex:
+                    app.logger.warning(f"Could not initialize fallback SirenDetectorV2: {ex}")
 
     global vehicle_detector, emergency_detector
     if vehicle_detector is None:
@@ -167,13 +201,11 @@ def execute_analysis(files, form):
     # Process optional siren audio
     # The siren audio represents an omnidirectional acoustic sensor for the intersection.
     audio_file = files.get("siren_audio") or files.get("audio") or files.get("audio_file")
-    siren_direction_hint = form.get("siren_direction", form.get("audio_direction", "Auto"))
     if not audio_file or audio_file.filename == "":
         for r in ROADS:
             candidate_audio = files.get(f"audio_{r.lower()}")
             if candidate_audio and candidate_audio.filename != "":
                 audio_file = candidate_audio
-                siren_direction_hint = r
                 break
 
     siren_analysis = {
@@ -182,6 +214,10 @@ def execute_analysis(files, form):
         "direction": "Omnidirectional",
         "is_siren": False,
         "confidence": None,
+        "predicted_class": None,
+        "probabilities": None,
+        "siren_type": None,
+        "model_version": siren_version_used,
         "error": None,
     }
 
@@ -201,6 +237,12 @@ def execute_analysis(files, form):
                 siren_pred = siren_detector.predict(audio_path)
                 siren_analysis["is_siren"] = bool(siren_pred.get("is_siren", False))
                 siren_analysis["confidence"] = siren_pred.get("confidence", 0.0)
+                siren_analysis["predicted_class"] = siren_pred.get("predicted_class")
+                siren_analysis["probabilities"] = siren_pred.get("probabilities")
+                siren_analysis["siren_type"] = siren_pred.get("siren_type")
+                siren_analysis["model_version"] = siren_pred.get("model_version", siren_version_used)
+                if siren_pred.get("error"):
+                    siren_analysis["error"] = siren_pred["error"]
             except Exception as e:
                 app.logger.exception(f"Siren detection inference failed: {e}")
                 siren_analysis["error"] = f"Acoustic analysis failed: {e}"
@@ -327,9 +369,10 @@ def execute_analysis(files, form):
 
     # 6. Direction-Independent Siren & Emergency Priority Resolution
     # Evaluates omnidirectional acoustic siren against YOLO detections across ALL 4 approaches
+    active_threshold = SIREN_V2_CONFIDENCE_THRESHOLD if siren_analysis.get("model_version") == "v2" else SIREN_CONFIDENCE_THRESHOLD
     siren_confirmed = bool(
         siren_analysis["is_siren"] and (
-            siren_analysis["confidence"] is not None and siren_analysis["confidence"] >= SIREN_CONFIDENCE_THRESHOLD
+            siren_analysis["confidence"] is not None and siren_analysis["confidence"] >= active_threshold
         )
     )
 
@@ -337,6 +380,7 @@ def execute_analysis(files, form):
         siren_confirmed=siren_confirmed,
         road_candidates=road_candidates,
         siren_confidence=siren_analysis["confidence"],
+        siren_type=siren_analysis.get("siren_type"),
         siren_provided=siren_analysis["provided"],
         min_vehicle_conf=EMERGENCY_CONFIDENCE_THRESHOLD,
     )
@@ -359,6 +403,7 @@ def execute_analysis(files, form):
             vehicle_confidence=cand["confidence"],
             siren_detected=siren_analysis["is_siren"],
             siren_confidence=siren_analysis["confidence"],
+            siren_type=siren_analysis.get("siren_type"),
             road=road,
         )
 
@@ -398,6 +443,10 @@ def execute_analysis(files, form):
                 "provided": siren_analysis["provided"],
                 "is_siren": siren_analysis["is_siren"],
                 "confidence": siren_analysis["confidence"],
+                "predicted_class": siren_analysis.get("predicted_class"),
+                "probabilities": siren_analysis.get("probabilities"),
+                "siren_type": siren_analysis.get("siren_type"),
+                "model_version": siren_analysis.get("model_version"),
                 "direction": emergency_road or "Omnidirectional",
             },
             "emergency_active": road_status["emergency_active"],
@@ -426,6 +475,8 @@ def execute_analysis(files, form):
             "vehicle_confidence": f"{vehicle_confidence:.2f}" if vehicle_confidence else "N/A",
             "siren": "ON",
             "siren_confidence": f"{siren_analysis['confidence']:.2f}" if siren_analysis["confidence"] else "N/A",
+            "siren_type": siren_analysis.get("siren_type") or "Generic Siren",
+            "siren_model_version": siren_analysis.get("model_version", "v1"),
             "action": "SAFETY TRANSITION -> GREEN",
         })
 
@@ -452,6 +503,8 @@ def execute_analysis(files, form):
             "siren_provided": siren_analysis["provided"],
             "siren_detected": siren_analysis["is_siren"],
             "siren_confidence": siren_analysis["confidence"],
+            "siren_type": siren_analysis.get("siren_type"),
+            "siren_model_version": siren_analysis.get("model_version"),
             "confirmed": True,
             "emergency_road": emergency_road,
             "outcome_case": priority_res["outcome_case"],
@@ -483,6 +536,8 @@ def execute_analysis(files, form):
             "siren_provided": siren_analysis["provided"],
             "siren_detected": siren_analysis["is_siren"],
             "siren_confidence": siren_analysis["confidence"],
+            "siren_type": siren_analysis.get("siren_type"),
+            "siren_model_version": siren_analysis.get("model_version"),
             "confirmed": False,
             "emergency_road": None,
             "outcome_case": priority_res["outcome_case"],
@@ -545,7 +600,7 @@ def api_analyze():
     Accepts multipart form with:
     - north, east, south, west image files
     - optional siren_audio / audio WAV file
-    - optional siren_direction (North, East, South, West)
+    - optional siren_version (v1, v2)
     Returns structured JSON with all metrics, annotations, and simulation plans.
     """
     result_data, err = execute_analysis(request.files, request.form)
@@ -554,6 +609,24 @@ def api_analyze():
         return jsonify({"success": False, "error": error_msg}), status_code
 
     return jsonify({"success": True, "data": result_data}), 200
+
+
+@app.route("/api/siren_model_info", methods=["GET"])
+def api_siren_model_info():
+    """Returns availability and metadata for both Siren V1 and V2 models."""
+    from audio.siren_detector_v2 import SirenDetectorV2
+    return jsonify({
+        "success": True,
+        "active_version": SIREN_ACTIVE_VERSION,
+        "v1": {
+            "available": _siren_model_available(),
+            "path": SIREN_MODEL_PATH,
+            "classes": ["no_siren", "siren"],
+            "features": 26,
+        },
+        "v2": SirenDetectorV2.get_model_info(),
+    })
+
 
 
 @app.route("/api/demo_samples", methods=["GET"])

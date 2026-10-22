@@ -40,6 +40,7 @@ def evaluate_emergency_candidate(
     vehicle_confidence: Optional[float] = None,
     siren_detected: bool = False,
     siren_confidence: Optional[float] = None,
+    siren_type: Optional[str] = None,
     road: Optional[str] = None,
     min_vehicle_conf: float = EMERGENCY_CONFIDENCE_THRESHOLD,
     min_siren_conf: float = SIREN_CONFIDENCE_THRESHOLD,
@@ -76,8 +77,9 @@ def evaluate_emergency_candidate(
     if is_candidate:
         conf_str = f" ({vehicle_confidence:.0%})" if vehicle_confidence is not None else ""
         siren_conf_str = f" ({siren_confidence:.0%})" if siren_confidence is not None else ""
+        siren_type_str = f" ({siren_type.replace('_', ' ')})" if siren_type else ""
         reason = (
-            f"Emergency priority confirmed: {vehicle_type}{conf_str} detected with active siren{siren_conf_str}. "
+            f"Emergency priority confirmed: {vehicle_type}{conf_str} detected with active siren{siren_type_str}{siren_conf_str}. "
             f"Safety transition granted."
         )
     elif vehicle_confirmed and not siren_confirmed:
@@ -102,6 +104,7 @@ def evaluate_emergency_candidate(
         "vehicle_confidence": vehicle_confidence,
         "siren_detected": siren_confirmed,
         "siren_confidence": siren_confidence,
+        "siren_type": siren_type,
         "road": road,
         "reason": reason,
     }
@@ -169,6 +172,7 @@ def resolve_emergency_priority(
     siren_confirmed: bool,
     road_candidates: Dict[str, Dict[str, Any]],
     siren_confidence: Optional[float] = None,
+    siren_type: Optional[str] = None,
     siren_provided: bool = False,
     min_vehicle_conf: float = EMERGENCY_CONFIDENCE_THRESHOLD,
 ) -> Dict[str, Any]:
@@ -187,8 +191,13 @@ def resolve_emergency_priority(
     - Case C: Emergency vehicle detected in one or more directions, but NO siren confirmed.
               -> Maintain normal adaptive allocation; mark candidate confirmation pending.
     - Case D: Siren confirmed and emergency vehicles are detected in MULTIPLE directions.
-              -> Avoid arbitrary selection. If one has significantly higher confidence, prioritize it;
-                 otherwise mark as ambiguous and preserve balanced adaptive cycle to avoid intersection deadlock.
+              -> Documented Disambiguation Policy:
+                 1. If acoustic classifier confirms a specific siren type (e.g. 'ambulance_siren' vs 'fire_truck_siren')
+                    and exactly one approach contains a matching vehicle type, prioritize that approach.
+                 2. Otherwise, if one candidate has significantly higher visual confidence (margin >= 0.20),
+                    prioritize the higher-confidence vehicle.
+                 3. If ambiguity remains unresolved (comparable confidence, conflicting types), exclusive preemption
+                    is suspended (is_ambiguous=True) to prevent intersection deadlock, preserving balanced adaptive cycle.
     - Case E: Neither siren nor emergency vehicle detected.
               -> Maintain normal adaptive allocation.
     """
@@ -233,8 +242,9 @@ def resolve_emergency_priority(
         outcome_case = "CASE_A_SINGLE_EMERGENCY"
         conf_str = f" ({prioritized_confidence:.0%})" if prioritized_confidence is not None else ""
         siren_conf_str = f" ({siren_confidence:.0%})" if siren_confidence is not None else ""
+        siren_type_str = f" ({siren_type.replace('_', ' ')})" if siren_type else ""
         reason = f"Emergency confirmed — safely prioritizing {emergency_road} direction."
-        detailed_reason = f"Emergency confirmed: {prioritized_vehicle}{conf_str} detected on {emergency_road} with active siren{siren_conf_str}. Priority granted."
+        detailed_reason = f"Emergency confirmed: {prioritized_vehicle}{conf_str} detected on {emergency_road} with active siren{siren_type_str}{siren_conf_str}. Priority granted."
 
     elif siren_confirmed and len(confirmed_candidates) == 0:
         # Case B: Siren confirmed, but no emergency vehicle in any of the 4 directions
@@ -256,20 +266,39 @@ def resolve_emergency_priority(
     elif siren_confirmed and len(confirmed_candidates) > 1:
         # Case D: Siren confirmed and multiple directions contain emergency vehicles
         outcome_case = "CASE_D_MULTIPLE_EMERGENCY"
-        # Deterministic selection policy:
+        # Deterministic multi-tier selection policy:
         sorted_cands = sorted(confirmed_candidates, key=lambda x: x["confidence"], reverse=True)
         top1, top2 = sorted_cands[0], sorted_cands[1]
 
-        # If one candidate has distinctly higher confidence (margin >= 0.20), select it deterministically
-        if (top1["confidence"] - top2["confidence"]) >= 0.20:
+        # Tier 1: Disambiguation by acoustic siren class (if specialized model V2 identified specific siren type)
+        type_matching_cands = []
+        if siren_type:
+            target_vehicle = "Ambulance" if "ambulance" in siren_type else ("Fire Truck" if "fire" in siren_type else None)
+            if target_vehicle:
+                type_matching_cands = [c for c in confirmed_candidates if c["vehicle_type"] == target_vehicle]
+
+        if len(type_matching_cands) == 1:
+            match_cand = type_matching_cands[0]
+            emergency_active = True
+            emergency_road = match_cand["road"]
+            prioritized_vehicle = match_cand["vehicle_type"]
+            prioritized_confidence = match_cand["confidence"]
+            conf_str = f" ({prioritized_confidence:.0%})" if prioritized_confidence is not None else ""
+            siren_conf_str = f" ({siren_confidence:.0%})" if siren_confidence is not None else ""
+            reason = f"Multiple emergency vehicles detected. Disambiguated by siren type ({siren_type.replace('_', ' ')}): prioritizing {prioritized_vehicle} on {emergency_road}."
+            detailed_reason = f"Multiple approaches contain emergency vehicles. Acoustic siren classification identified {siren_type.replace('_', ' ')}{siren_conf_str}, matching {prioritized_vehicle}{conf_str} on {emergency_road}. Priority granted."
+
+        # Tier 2: Disambiguation by distinct confidence gap (margin >= 0.20)
+        elif (top1["confidence"] - top2["confidence"]) >= 0.20:
             emergency_active = True
             emergency_road = top1["road"]
             prioritized_vehicle = top1["vehicle_type"]
             prioritized_confidence = top1["confidence"]
             reason = f"Multiple emergency vehicles detected. Prioritizing {top1['vehicle_type']} on {top1['road']} ({top1['confidence']:.0%} vs {top2['confidence']:.0%})."
             detailed_reason = reason
+
+        # Tier 3: Ambiguous - Both candidates have comparable confidence; do not arbitrarily select first
         else:
-            # Ambiguous: Both candidates have comparable confidence; do not arbitrarily pick one
             emergency_active = False
             emergency_road = None
             is_ambiguous = True
@@ -335,7 +364,7 @@ def resolve_emergency_priority(
                 road_statuses[road] = {
                     "status_color": "amber",
                     "status_label": "Siren Detected (Searching Approaches)",
-                    "status_message": "Siren detected — searching all directions for emergency vehicles.",
+                    "status_message": "Siren detected, but no emergency vehicle was confirmed — searching all directions for emergency vehicles.",
                     "emergency_priority_confirmed": False,
                     "emergency_active": False,
                 }
@@ -363,5 +392,6 @@ def resolve_emergency_priority(
         "road_statuses": road_statuses,
         "siren_confirmed": siren_confirmed,
         "siren_confidence": siren_confidence,
+        "siren_type": siren_type,
     }
 
